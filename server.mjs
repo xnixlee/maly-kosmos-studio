@@ -1,3 +1,14 @@
+import {
+  imageModels,
+  imageDefaults,
+  imageSettings,
+  characterMessages,
+  characterSchema,
+  parseCharacter,
+  characterDescription,
+  scenePrompt,
+  portraitPrompt,
+} from "./lib/creative.mjs";
 import http from "node:http";
 import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
@@ -48,6 +59,11 @@ const manager = new ModelManager(
 await manager.load();
 const openai = new OpenAIService(root, data);
 await openai.load();
+let imageConfig = imageSettings(
+  await (
+    await import("./lib/storage.mjs")
+  ).readJSON(path.join(data, "image-settings.json"), imageDefaults),
+);
 let engines = makeEngines(root, { ...manager.config, data });
 const exec = promisify(execFile);
 const rebuildEngines = () => {
@@ -111,6 +127,14 @@ for (const j of jobs)
     j.status = "error";
     j.error = "Студия была закрыта. Запусти задачу ещё раз.";
   }
+const publicJob = (j) => {
+  if (!j) return null;
+  const { characterWorld, ...view } = j;
+  const compactImage = ({ prompt, scene, settings, ...a }) => a;
+  if (view.images) view.images = view.images.map(compactImage);
+  if (view.portrait) view.portrait = compactImage(view.portrait);
+  return view;
+};
 const saveJobs = () => atomic(path.join(data, "jobs.json"), jobs.slice(0, 40));
 await saveJobs();
 function newJob(type, settings) {
@@ -140,6 +164,11 @@ async function runJob(job, fn) {
       console.error("Job:", e.message);
     }
   } finally {
+    job.finishedAt = new Date().toISOString();
+    if (job.status === "done") {
+      job.stage = "Готово";
+      if (job.progress) job.progress.completed = job.progress.total;
+    }
     if (active === job) active = null;
     await saveJobs();
   }
@@ -156,6 +185,7 @@ async function generate(job, s, rewrite) {
     recent = await allStories(),
     connection = structuredClone(manager.config.text);
   engines.voice.stop();
+  units(job, 0, s.count, "вариантов");
   for (let i = 0; i < s.count; i++) {
     checkCancelled(job);
     const settings = { ...s, seed: (s.seed + i) % 2147483648 };
@@ -251,6 +281,7 @@ async function generate(job, s, rewrite) {
     await locked(() => atomic(path.join(library, r.id + ".json"), r));
     job.results.push(r.id);
     recent.unshift(r);
+    units(job, i + 1, s.count, "вариантов");
     await saveJobs();
   }
 }
@@ -290,6 +321,12 @@ async function renderVoice(job, scenes, v, storyId, revision) {
     idx = 0;
   const dir = path.join(audioRoot, job.id);
   await fs.mkdir(dir, { recursive: true });
+  units(
+    job,
+    0,
+    scenes.reduce((n, s) => n + splitSpeech(s.text).length, 0),
+    "фрагментов речи",
+  );
   for (let i = 0; i < scenes.length; i++) {
     for (const text of splitSpeech(scenes[i].text)) {
       checkCancelled(job);
@@ -323,6 +360,7 @@ async function renderVoice(job, scenes, v, storyId, revision) {
         );
       }
       offset += result.duration;
+      job.progress.completed++;
     }
   }
   checkCancelled(job);
@@ -370,6 +408,131 @@ async function renderVoice(job, scenes, v, storyId, revision) {
         job.notice = "Озвучена предыдущая версия. Текущие правки сохранены.";
     });
 }
+async function readyText() {
+  if (manager.config.text.provider === "openai") await openai.key();
+  else {
+    const m = manager.get(manager.config.text.modelId);
+    if (!m.enabled || !(await manager.available(m)))
+      throw bad("Скачай или подключи текстовую модель в настройках.");
+  }
+}
+function units(job, completed, total, label) {
+  job.progress = { completed, total, label };
+}
+async function saveImage(job, request) {
+  const result = await openai.image(
+    { ...request, jobId: job.id, accountId: job.accountId },
+    (t) => stage(job, t),
+  );
+  // A response can finish just as cancellation arrives: preserve the paid result.
+  const id = randomUUID(),
+    dir = path.join(data, "images", job.id);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, id + ".png"), result.bytes);
+  const asset = {
+    id,
+    url: `/images/${job.id}/${id}.png`,
+    model: result.model,
+    usageId: result.usageId,
+    cost: result.cost,
+    createdAt: new Date().toISOString(),
+    prompt: request.prompt,
+    settings: request.settings,
+  };
+  (job.images ||= []).push(asset);
+  await saveJobs();
+  return asset;
+}
+async function generateFrames(job, r, indices, config) {
+  const w = r.worldSnapshot || world;
+  const cast = w.characters.filter((c) => r.settings.heroes.includes(c.id));
+  units(job, 0, indices.length, "кадров");
+  for (const [n, i] of indices.entries()) {
+    checkCancelled(job);
+    const scene = r.story.scenes[i];
+    stage(job, `Кадр ${n + 1} из ${indices.length} · собираем лор и героев`);
+    job.itemLabel = `Сцена ${i + 1} · ${n + 1} из ${indices.length}`;
+    const asset = await saveImage(job, {
+      prompt: scenePrompt(w, r, scene, config),
+      settings: config,
+      references: cast.filter((c) => c.portraitData).map((c) => c.portraitData),
+    });
+    Object.assign(asset, {
+      sceneIndex: i,
+      scene: structuredClone(scene),
+      storyId: r.id,
+    });
+    await locked(async () => {
+      const latest = await getStory(r.id);
+      (latest.images ||= []).push(asset);
+      await atomic(path.join(library, r.id + ".json"), latest);
+    });
+    job.results = [r.id];
+    units(job, n + 1, indices.length, "кадров");
+    await saveJobs();
+  }
+}
+async function generateCharacter(
+  job,
+  w,
+  brief,
+  withPortrait,
+  config,
+  connection,
+) {
+  engines.voice.stop();
+  const ids = voices().map((v) => v.id);
+  if (!ids.length) ids.push("aidar");
+  const chat = characterMessages(w, brief, ids);
+  units(job, 0, withPortrait ? 2 : 1, "этапов");
+  let raw;
+  if (connection.provider === "openai")
+    raw = (
+      await openai.generate(
+        {
+          messages: chat,
+          schema: characterSchema(ids),
+          schemaName: "cosmos_character",
+          model: connection.modelId,
+          reasoning: connection.reasoning,
+          jobId: job.id,
+          accountId: job.accountId,
+        },
+        (t) => stage(job, t.replace("Пишем историю", "Придумываем персонажа")),
+      )
+    ).text;
+  else
+    raw = await engines.text.call(
+      {
+        messages: chat,
+        model_path: manager.get(connection.modelId).path,
+        seed: Math.floor(Math.random() * 2147483647),
+        temperature: 0.8,
+        max_tokens: 3400,
+      },
+      (t) => stage(job, t.replace("Пишем историю", "Придумываем персонажа")),
+    );
+  checkCancelled(job);
+  job.character = parseCharacter(raw, ids);
+  job.worldId = w.id;
+  job.worldName = w.name;
+  job.characterWorld = {
+    ...w,
+    characters: w.characters.map(({ portraitData, ...c }) => c),
+  };
+  units(job, 1, withPortrait ? 2 : 1, "этапов");
+  await saveJobs();
+  if (withPortrait) {
+    stage(job, "Карточка готова · рисуем портрет");
+    job.itemLabel = "Портрет персонажа";
+    job.portrait = await saveImage(job, {
+      prompt: portraitPrompt(w, job.character, config),
+      settings: { ...config, size: "1024x1024" },
+    });
+    units(job, 2, 2, "этапов");
+  }
+}
+
 async function body(req) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
     throw bad("Нужен JSON.", 415);
@@ -480,10 +643,11 @@ const server = http.createServer(async (req, res) => {
         voices: await manager.voices(),
         models: await manager.view(),
         account: await openai.view(),
+        imageSettings: { settings: imageConfig, models: imageModels },
         stories: await allStories(),
         status: await runtime(),
-        active,
-        jobs: jobs.slice(0, 10),
+        active: publicJob(active),
+        jobs: jobs.slice(0, 10).map(publicJob),
       });
     if (req.method === "GET" && p === "/api/stories")
       return json(res, 200, await allStories());
@@ -517,10 +681,112 @@ const server = http.createServer(async (req, res) => {
           throw bad("Скачай или подключи текстовую модель в настройках.");
       } else await openai.key();
       const job = newJob("story", s);
-      json(res, 202, job);
+      json(res, 202, publicJob(job));
       void runJob(job, () => generate(job, s, rewrite));
       return;
     }
+    if (req.method === "GET" && p === "/api/image-settings")
+      return json(res, 200, { settings: imageConfig, models: imageModels });
+    if (req.method === "PUT" && p === "/api/image-settings") {
+      imageConfig = imageSettings(await body(req));
+      await atomic(path.join(data, "image-settings.json"), imageConfig);
+      return json(res, 200, { settings: imageConfig, models: imageModels });
+    }
+    if (req.method === "GET" && p === "/api/jobs")
+      return json(res, 200, {
+        active: publicJob(active),
+        jobs: jobs.slice(0, 40).map(publicJob),
+      });
+    if (req.method === "POST" && p === "/api/characters/generate") {
+      const b = await body(req);
+      if (
+        typeof b.brief !== "string" ||
+        !b.brief.trim() ||
+        b.brief.length > 2500 ||
+        typeof b.portrait !== "boolean"
+      )
+        throw bad("Опиши героя: до 2500 символов.");
+      await readyText();
+      if (b.portrait) await openai.key();
+      const w = structuredClone(world),
+        connection = structuredClone(manager.config.text),
+        config = structuredClone(imageConfig);
+      const job = newJob("character", {
+        brief: b.brief,
+        portrait: b.portrait,
+        connection,
+      });
+      job.worldId = w.id;
+      job.worldName = w.name;
+      job.characterWorld = {
+        ...w,
+        characters: w.characters.map(({ portraitData, ...c }) => c),
+      };
+      job.accountId = (await openai.view()).active;
+      json(res, 202, publicJob(job));
+      void runJob(job, () =>
+        generateCharacter(job, w, b.brief, b.portrait, config, connection),
+      );
+      return;
+    }
+    const portraitMatch = /^\/api\/characters\/([a-f0-9-]{36})\/portrait$/.exec(
+      p,
+    );
+    if (req.method === "POST" && portraitMatch) {
+      const source = jobs.find((j) => j.id === portraitMatch[1]);
+      if (!source?.characterWorld || !source.character)
+        throw bad("Карточка не найдена.", 404);
+      const b = await body(req),
+        c = parseCharacter(b.character, [
+          ...new Set([...voices().map((v) => v.id), source.character.voice]),
+        ]);
+      await openai.key();
+      const config = structuredClone(imageConfig);
+      const job = newJob("character", { portrait: true });
+      Object.assign(job, {
+        character: c,
+        characterWorld: source.characterWorld,
+        worldId: source.worldId,
+        worldName: source.worldName,
+        accountId: (await openai.view()).active,
+      });
+      json(res, 202, publicJob(job));
+      void runJob(job, async () => {
+        units(job, 0, 1, "портретов");
+        job.portrait = await saveImage(job, {
+          prompt: portraitPrompt(job.characterWorld, c, config),
+          settings: { ...config, size: "1024x1024" },
+        });
+        units(job, 1, 1, "портретов");
+      });
+      return;
+    }
+    const acceptMatch = /^\/api\/characters\/([a-f0-9-]{36})\/accept$/.exec(p);
+    if (req.method === "POST" && acceptMatch) {
+      const job = jobs.find((j) => j.id === acceptMatch[1]);
+      if (!job?.character) throw bad("Карточка не найдена.", 404);
+      if (job.status === "running")
+        throw bad("Дождись портрета или останови задачу.", 409);
+      const b = await body(req),
+        c = parseCharacter(b.character, [
+          ...new Set([...voices().map((v) => v.id), job.character.voice]),
+        ]);
+      const character = {
+        id: "hero-" + job.id.slice(0, 8),
+        name: c.name,
+        role: c.role,
+        description: characterDescription(c),
+        voice: c.voice,
+        portrait: null,
+        ...(b.portraitData ? { portraitData: b.portraitData } : {}),
+      };
+      const updated = await worlds.addCharacter(job.worldId, character);
+      world = worlds.current;
+      job.accepted = true;
+      await saveJobs();
+      return json(res, 200, { world: updated, character });
+    }
+
     if (req.method === "GET" && p === "/api/models")
       return json(res, 200, await manager.view());
     if (req.method === "PUT" && p === "/api/models/settings") {
@@ -551,7 +817,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "POST" && action === "install") {
         const job = newJob("install", { model: id });
-        json(res, 202, job);
+        json(res, 202, publicJob(job));
         void runJob(job, async () => {
           engines.text.stop();
           engines.voice.stop();
@@ -568,7 +834,7 @@ const server = http.createServer(async (req, res) => {
       if (!["text", "voice", "rvc"].includes(b.kind))
         throw bad("Выбери движок.");
       const job = newJob("install", { engine: b.kind });
-      json(res, 202, job);
+      json(res, 202, publicJob(job));
       void runJob(job, async () => {
         engines.text.stop();
         engines.voice.stop();
@@ -617,7 +883,7 @@ const server = http.createServer(async (req, res) => {
     if (jobMatch) {
       const job = jobs.find((j) => j.id === jobMatch[1]);
       if (!job) throw bad("Задача не найдена.", 404);
-      if (req.method === "GET") return json(res, 200, job);
+      if (req.method === "GET") return json(res, 200, publicJob(job));
       if (req.method === "DELETE") {
         if (job.status === "running") {
           job.status = "cancelled";
@@ -627,10 +893,11 @@ const server = http.createServer(async (req, res) => {
           manager.cancelInstall();
           await saveJobs();
         }
-        return json(res, 200, job);
+        return json(res, 200, publicJob(job));
       }
     }
-    const storyMatch = /^\/api\/stories\/([^/]+)(?:\/(export|audio))?$/.exec(p);
+    const storyMatch =
+      /^\/api\/stories\/([^/]+)(?:\/(export|audio|images))?$/.exec(p);
     if (storyMatch) {
       const [, id, action] = storyMatch;
       const r = await getStory(id);
@@ -693,7 +960,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "DELETE" && !action) {
         if (active?.storyId === id)
-          throw bad("Сначала останови озвучку этой истории.", 409);
+          throw bad("Сначала останови генерацию для этой истории.", 409);
         await locked(() => fs.rm(path.join(library, id + ".json")));
         if (r.audio)
           await fs.rm(path.join(audioRoot, r.audio.id), {
@@ -707,10 +974,33 @@ const server = http.createServer(async (req, res) => {
           v = voiceSettings(b);
         const job = newJob("audio", v);
         job.storyId = id;
-        json(res, 202, job);
+        json(res, 202, publicJob(job));
         void runJob(job, () =>
           renderVoice(job, r.story.scenes, v, id, r.revision),
         );
+        return;
+      }
+      if (req.method === "POST" && action === "images") {
+        const b = await body(req);
+        await openai.key();
+        const indices =
+          b.scenes === "all" ? r.story.scenes.map((_, i) => i) : b.scenes;
+        if (
+          !Array.isArray(indices) ||
+          !indices.length ||
+          indices.length > 15 ||
+          indices.some(
+            (i) => !Number.isInteger(i) || i < 0 || i >= r.story.scenes.length,
+          ) ||
+          new Set(indices).size !== indices.length
+        )
+          throw bad("Выбери сцены для изображений.");
+        const config = imageSettings({ ...imageConfig, ...b.settings });
+        const job = newJob("images", { scenes: indices, image: config });
+        job.storyId = id;
+        job.accountId = (await openai.view()).active;
+        json(res, 202, publicJob(job));
+        void runJob(job, () => generateFrames(job, r, indices, config));
         return;
       }
       if (req.method === "GET" && !action) return json(res, 200, r);
@@ -721,7 +1011,7 @@ const server = http.createServer(async (req, res) => {
       if (typeof b.text !== "string" || !b.text.trim() || b.text.length > 300)
         throw bad("Для пробы нужно от 1 до 300 символов.");
       const job = newJob("preview", v);
-      json(res, 202, job);
+      json(res, 202, publicJob(job));
       void runJob(job, () =>
         renderVoice(job, [{ speaker: "Рассказчик", text: b.text }], v),
       );
@@ -731,11 +1021,21 @@ const server = http.createServer(async (req, res) => {
       /^\/media\/([a-f0-9-]{36})\/(narration\.wav|subtitles\.srt)$/.exec(p);
     if (["GET", "HEAD"].includes(req.method) && media)
       return await file(req, res, path.join(audioRoot, media[1], media[2]));
+    const imageMedia = /^\/images\/([a-f0-9-]{36})\/([a-f0-9-]{36})\.png$/.exec(
+      p,
+    );
+    if (["GET", "HEAD"].includes(req.method) && imageMedia)
+      return await file(
+        req,
+        res,
+        path.join(data, "images", imageMedia[1], imageMedia[2] + ".png"),
+      );
     const files = {
       "/": "index.html",
       "/app.js": "app.js",
       "/settings.js": "settings.js",
       "/account.js": "account.js",
+      "/creative.js": "creative.js",
       "/style.css": "style.css",
       "/village.png": "village.png",
       "/characters.png": "characters.png",

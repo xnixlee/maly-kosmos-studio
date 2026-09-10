@@ -12,6 +12,20 @@
       "longCachedInput": 0.04,
       "longCacheWrite": 0.5,
       "longOutput": 1.8
+    },
+    "gpt-image-2.5-flare": {
+      "textInput": 5,
+      "cachedTextInput": 1.25,
+      "imageInput": 8,
+      "cachedImageInput": 2,
+      "imageOutput": 30
+    },
+    "gpt-image-2.5-sunburst": {
+      "textInput": 5,
+      "cachedTextInput": 1.25,
+      "imageInput": 8,
+      "cachedImageInput": 2,
+      "imageOutput": 30
     }
   }
 }

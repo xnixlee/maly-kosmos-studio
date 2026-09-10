@@ -17,6 +17,9 @@
         ><span class="orbit">мк</span><span>МАЛЫЙ<br />КОСМОС</span></a
       ><span class="rail-label">МАСТЕРСКАЯ</span>
       <nav>
+        <button class="nav" data-page="tasks">
+          ◷ &nbsp; Задачи <span id="tasks-count"></span>
+        </button>
         <button class="nav active" data-page="studio">✧ &nbsp; Сценарии</button
         ><button class="nav" data-page="library">
           ▤ &nbsp; Библиотека <span id="library-count">1</span></button
@@ -200,13 +203,22 @@
             />
           </div>
         </div>
+        <div id="character-generator"></div>
         <div id="world-editor"></div>
       </section>
       <section id="page-account" class="page hidden">
         <div id="account-editor"></div>
       </section>
       <section id="page-settings" class="page hidden">
+        <div id="image-settings-editor"></div>
         <div id="settings-editor"></div>
+      </section>
+      <section id="page-tasks" class="page hidden">
+        <p class="muted">
+          Последние 40 задач. Студия выполняет одну тяжёлую задачу за раз.
+          Остановка не отменяет уже понесённые расходы OpenAI.
+        </p>
+        <div id="tasks-list" class="task-list"></div>
       </section>
       <div id="toast" role="status" class="toast hidden"></div>
     </main>

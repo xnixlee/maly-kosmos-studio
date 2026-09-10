@@ -1,3 +1,4 @@
+import { setupCreative } from "./creative.js";
 import { setupSettings } from "./settings.js";
 import { setupAccount } from "./account.js";
 const $ = (s) => document.querySelector(s),
@@ -149,6 +150,7 @@ const titles = {
   world: "Здесь всё имеет последствия.",
   settings: "Твои модели и движки.",
   account: "OpenAI: ключи и расходы.",
+  tasks: "Всё, что сейчас создаётся.",
 };
 function navigate(next) {
   page = next;
@@ -160,10 +162,15 @@ function navigate(next) {
   );
   $("#page-title").textContent = titles[next];
   if (next === "library") renderLibrary();
+  if (next === "tasks")
+    creativeUI.refreshTasks().catch((e) => toast(e.message, true));
   if (next === "account")
     accountUI.refresh().catch((e) => toast(e.message, true));
 }
-$$("[data-page]").forEach((b) => (b.onclick = () => navigate(b.dataset.page)));
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-page]");
+  if (b) navigate(b.dataset.page);
+});
 function persistDraft() {
   if (!current) return;
   try {
@@ -247,7 +254,7 @@ function renderEditor() {
        '<button id="add-scene" class="text-button">+ Добавить сцену</button>'
      : ""
  }
- ${tab === "shots" ? st.scenes.map((s, i) => `<section class="scene"><span class="scene-number">${String(i + 1).padStart(2, "0")}</span><label>Действие в кадре<textarea data-scene="${i}" data-key="visual" maxlength="2500" rows="3">${esc(s.visual)}</textarea></label><label>Звук и паузы<textarea data-scene="${i}" data-key="sound" maxlength="2500" rows="2">${esc(s.sound)}</textarea></label><label>Промпт для изображения<textarea class="prompt-text" data-scene="${i}" data-key="imagePrompt" maxlength="2500">${esc(s.imagePrompt)}</textarea></label><button class="text-button" data-copy-prompt="${i}">Копировать промпт</button></section>`).join("") : ""}
+ ${tab === "shots" ? `<div class="actions"><button id="generate-all-frames" class="primary">Нарисовать все кадры · ${st.scenes.length}</button><button data-page="settings" class="text-button">Модель и качество ↗</button></div><p class="hint">Отдельный платный запрос OpenAI на каждый кадр. Перед запуском правки сохранятся. Готовые варианты останутся в истории.</p>` + st.scenes.map((s, i) => `<section class="scene"><span class="scene-number">${String(i + 1).padStart(2, "0")}</span><label>Действие в кадре<textarea data-scene="${i}" data-key="visual" maxlength="2500" rows="3">${esc(s.visual)}</textarea></label><label>Звук и паузы<textarea data-scene="${i}" data-key="sound" maxlength="2500" rows="2">${esc(s.sound)}</textarea></label><label>Промпт для изображения<textarea class="prompt-text" data-scene="${i}" data-key="imagePrompt" maxlength="2500">${esc(s.imagePrompt)}</textarea></label><button class="text-button" data-copy-prompt="${i}">Копировать промпт</button>${creativeUI.shots(s, i, current)}</section>`).join("") : ""}
  ${
    tab === "voice"
      ? `<p class="muted">Каждая реплика получает голос своего героя. Рассказчик озвучивается отдельно.</p><label>Рассказчик<select data-voice="voice">${voiceOptions(v.voice)}</select></label><div class="two"><label>Темп речи<input type="number" data-voice="speed" min="0.7" max="1.4" step="0.05" value="${v.speed}"></label><label>Высота, полутона<input type="number" data-voice="pitch" min="-6" max="6" step="1" value="${v.pitch}"></label></div>${speakers()
@@ -309,6 +316,9 @@ $("#editor").onclick = safe(async (e) => {
     renderEditor();
   }
   if (b.id === "save-story") await saveStory();
+  if (b.id === "generate-all-frames") await creativeUI.generateFrames("all");
+  if (b.dataset.generateFrame !== undefined)
+    await creativeUI.generateFrames([Number(b.dataset.generateFrame)]);
   if (b.dataset.export) {
     const s = await saveStory(true);
     const link = document.createElement("a");
@@ -497,6 +507,47 @@ const settingsUI = setupSettings({
   navigate,
 });
 const accountUI = setupAccount({ $, state, api, esc, safe, toast });
+const creativeUI = setupCreative({
+  $,
+  api,
+  esc,
+  safe,
+  toast,
+  startJob,
+  navigate,
+  state,
+  getCurrent: () => current,
+  saveStory,
+  saveWorld: async () => {
+    state.world = await api("/api/world", "PUT", worldDraft);
+    heroPicker();
+    await refreshWorldList();
+  },
+  refreshStory: async (id, open = false) => {
+    if (dirty && current?.id === id) {
+      toast("Сначала сохрани правки истории.", true);
+      return;
+    }
+    const r = await api("/api/stories/" + id);
+    chooseStory(r);
+    if (open) navigate("studio");
+  },
+  onAccepted: async (w, character) => {
+    if (state.world.id === w.id) {
+      // Keep unsaved lore edits while merging the newly accepted resident.
+      const additions = w.characters.filter(
+        (c) =>
+          c.id === character.id &&
+          !worldDraft.characters.some((d) => d.id === c.id),
+      );
+      worldDraft.characters.push(...additions);
+      state.world = w;
+      heroPicker();
+      renderWorld();
+    }
+    await refreshWorldList();
+  },
+});
 
 function busy(value) {
   $("#generate").disabled = value;
@@ -504,19 +555,14 @@ function busy(value) {
     ? "Готовим материал…"
     : "✧  Придумать историю";
   $("#cancel").classList.toggle("hidden", !value);
-  $$("#rewrite,#render-audio,[data-test-voice],[data-preview-scene]").forEach(
-    (b) => (b.disabled = value),
-  );
+  $$(
+    "#rewrite,#render-audio,#generate-character,#generate-all-frames,[data-generate-frame],[data-test-voice],[data-preview-scene]",
+  ).forEach((b) => (b.disabled = value));
 }
 function showJob(j) {
   $("#job-progress").classList.remove("hidden");
   $("#job-stage").textContent = j.stage;
-  $("#job-detail").textContent =
-    j.type === "story"
-      ? `${j.results.length} вариантов сохранено · можно продолжать редактировать`
-      : j.type === "install"
-        ? "Установка в локальное хранилище · файлы не попадут в Git"
-        : "Озвучка работает на этом Mac · готовую дорожку можно скачать";
+  $("#job-detail").textContent = creativeUI.progress(j);
 }
 async function watchJob() {
   if (!job) return;
@@ -524,6 +570,7 @@ async function watchJob() {
     const j = await api("/api/jobs/" + job.id);
     job = j;
     showJob(j);
+    await creativeUI.refreshTasks();
     if (j.status === "running") {
       pollTimer = setTimeout(watchJob, 1500);
       return;
@@ -534,7 +581,14 @@ async function watchJob() {
     $("#job-progress").classList.add("hidden");
     state.stories = await api("/api/stories");
     renderLibrary();
-    if (ended.type === "story") await accountUI.refresh();
+    if (["story", "character", "images"].includes(ended.type))
+      await accountUI.refresh();
+    if (ended.character) await creativeUI.showCharacter(ended);
+    if (ended.type === "images" && current?.id === ended.storyId && !dirty) {
+      current = state.stories.find((r) => r.id === current.id) || current;
+      tab = "shots";
+      renderEditor();
+    }
     if (ended.status === "error") toast(ended.error, true);
     else if (ended.status === "cancelled")
       toast("Задача остановлена. Готовые варианты сохранены.");
@@ -545,6 +599,10 @@ async function watchJob() {
       const r = state.stories.find((r) => r.id === ended.results[0]);
       if (r) chooseStory(r);
       toast(`Готово. Сохранено вариантов: ${ended.results.length}.`);
+    } else if (ended.type === "character") {
+      toast("Карточка готова. Можно отредактировать и добавить в мир.");
+    } else if (ended.type === "images") {
+      toast("Кадры сохранены в истории.");
     } else if (ended.audio) {
       if (ended.type === "audio" && current?.id === ended.storyId && !dirty) {
         current = state.stories.find((r) => r.id === current.id) || current;
@@ -552,7 +610,11 @@ async function watchJob() {
         renderEditor();
       }
       const target =
-        page === "settings" ? $("#voice-preview-player") : $("#scene-preview");
+        page === "settings"
+          ? $("#voice-preview-player")
+          : page === "world"
+            ? $("#character-preview-player")
+            : $("#scene-preview");
       if (target) {
         const a = document.createElement("audio");
         a.controls = true;
@@ -561,6 +623,7 @@ async function watchJob() {
       }
       toast(ended.notice || "Озвучка готова.");
     }
+    busy(false);
   } catch (e) {
     toast("Связь со студией прервалась. Повторяем проверку…", true);
     pollTimer = setTimeout(watchJob, 5000);
@@ -576,7 +639,11 @@ function startJob(j) {
       ? "Пишем историю: " + settingsUI.modelName()
       : j.type === "install"
         ? "Устанавливаем движок или модель."
-        : "Готовим голос. Первый запуск может занять несколько минут.",
+        : j.type === "character"
+          ? "Придумываем нового жителя по лору."
+          : j.type === "images"
+            ? "Рисуем кадры. Прогресс — в разделе задач."
+            : "Готовим голос. Первый запуск может занять несколько минут.",
   );
   watchJob();
 }
@@ -593,6 +660,14 @@ await refreshWorldList();
 renderLibrary();
 chooseStory(state.stories[0] || null);
 if (state.active) startJob(state.active);
+await creativeUI.refreshTasks();
+setInterval(async () => {
+  if (job) return;
+  try {
+    const data = await creativeUI.refreshTasks();
+    if (data.active) startJob(data.active);
+  } catch {}
+}, 5000);
 if (document.modelContext?.registerTool) {
   const lifecycle = new AbortController();
   try {

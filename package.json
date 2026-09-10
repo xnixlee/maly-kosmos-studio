@@ -1,0 +1,27 @@
+{
+  "name": "maly-kosmos-studio",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "setup:text": "node scripts/install-engine.mjs text",
+    "setup:voice": "node scripts/install-engine.mjs voice",
+    "setup:rvc": "node scripts/install-engine.mjs rvc",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "description": "An open-source, local-first story studio with editable worlds, local AI models and OpenAI.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

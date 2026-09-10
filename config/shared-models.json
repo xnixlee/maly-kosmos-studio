@@ -1,0 +1,14 @@
+{
+  "silero": {
+    "url": "https://models.silero.ai/models/tts/ru/v5_ru.pt",
+    "sha256": "7ba04d42340fe0398042eed2e0d12d62e23096d626b1b9feff4dcb1309197ab4"
+  },
+  "applio": {
+    "repo": "IAHispano/Applio",
+    "revision": "774d3d1f46102030638bc27d3a95cda6f68cf293"
+  },
+  "rvc": {
+    "repo": "https://github.com/Acelogic/Retrieval-based-Voice-Conversion-MLX.git",
+    "revision": "eec7791a59eb09d0f56f1189df55e9852848e692"
+  }
+}

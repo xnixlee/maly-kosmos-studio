@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Малый космос · Сценарная мастерская</title>
+    <meta
+      name="description"
+      content="Локальная мастерская историй, персонажей и озвучки Малого космоса."
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <aside class="rail">
+      <a class="brand" href="/" aria-label="Малый космос"
+        ><span class="orbit">мк</span><span>МАЛЫЙ<br />КОСМОС</span></a
+      ><span class="rail-label">МАСТЕРСКАЯ</span>
+      <nav>
+        <button class="nav active" data-page="studio">✧ &nbsp; Сценарии</button
+        ><button class="nav" data-page="library">
+          ▤ &nbsp; Библиотека <span id="library-count">1</span></button
+        ><button class="nav" data-page="world">◎ &nbsp; Мир и герои</button
+        ><button class="nav" data-page="settings">
+          ≋ &nbsp; Модели и голоса</button
+        ><button class="nav" data-page="account">
+          $ &nbsp; Кабинет OpenAI
+        </button>
+      </nav>
+      <div class="rail-bottom">
+        <img src="/village.png" alt="Дачные планетки Малого космоса" />
+        <p>У каждого участка<br />свой низ.</p>
+        <span>Локальная студия · 01</span>
+      </div>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <span class="eyebrow">СЦЕНАРНАЯ МАСТЕРСКАЯ</span>
+          <h1 id="page-title">Соберём странную историю.</h1>
+        </div>
+        <button id="engine-badge" class="badge" data-page="settings">
+          Проверяем движки…
+        </button>
+      </header>
+      <section id="page-studio" class="page">
+        <div class="workspace">
+          <form id="generator" class="brief panel">
+            <div class="section-head">
+              <h2>Что происходит?</h2>
+              <button type="button" class="text-button" id="random-idea">
+                Подбросить идею ↗
+              </button>
+            </div>
+            <label for="prompt">Завязка или просто странная мысль</label
+            ><textarea
+              id="prompt"
+              rows="3"
+              placeholder="Веня случайно покормил чужую Луну…"
+            >
+Квазар решил проверить, кто выключает звёзды по ночам.</textarea
+            >
+            <div class="section-head">
+              <h3>Кто участвует</h3>
+              <span id="selected-count" class="muted"></span>
+            </div>
+            <div id="hero-picker" class="hero-picker"></div>
+            <div class="two">
+              <label>Место<select id="place"></select></label
+              ><label
+                >Формат<select id="format">
+                  <option value="episode">Короткий эпизод</option>
+                  <option value="dialogue">Диалог</option>
+                  <option value="lore">Случай из жизни мира</option>
+                </select></label
+              >
+            </div>
+            <div class="two">
+              <label
+                >Длительность<select id="duration">
+                  <option value="30">≈ 30 секунд</option>
+                  <option value="45" selected>≈ 45 секунд</option>
+                  <option value="60">≈ 1 минута</option>
+                  <option value="90">≈ 1,5 минуты</option>
+                </select></label
+              ><label
+                >Вариантов<select id="count">
+                  <option value="1">Один</option>
+                  <option value="3">Три разных</option>
+                  <option value="5">Пять разных</option>
+                </select></label
+              >
+            </div>
+            <h3>Настроение</h3>
+            <div class="sliders">
+              <label
+                >Абсурд <output id="absurd-value">70</output
+                ><input
+                  type="range"
+                  id="absurd"
+                  min="0"
+                  max="100"
+                  value="70" /></label
+              ><label
+                >Теплота <output id="warmth-value">50</output
+                ><input
+                  type="range"
+                  id="warmth"
+                  min="0"
+                  max="100"
+                  value="50" /></label
+              ><label
+                >Тревога <output id="dread-value">20</output
+                ><input type="range" id="dread" min="0" max="100" value="20"
+              /></label>
+            </div>
+            <details>
+              <summary>Точная настройка</summary>
+              <label
+                >Развязка<select id="ending">
+                  <option>Визуальный панчлайн</option>
+                  <option>Тёплое открытие</option>
+                  <option>Тревожная деталь</option>
+                  <option>Открытый финал</option>
+                </select></label
+              ><label
+                >Обязательно учесть / чего избегать<textarea
+                  id="constraints"
+                  rows="3"
+                  placeholder="Без морали в конце. Оставить ключ Вени важной деталью."
+                ></textarea>
+              </label>
+              <div class="two">
+                <label
+                  >Свобода модели<input
+                    id="temperature"
+                    type="number"
+                    min="0.1"
+                    max="1.4"
+                    step="0.05"
+                    value="0.85" /></label
+                ><label
+                  >Зерно варианта<input
+                    id="seed"
+                    type="number"
+                    min="0"
+                    max="2147483647"
+                    placeholder="Случайное"
+                /></label>
+              </div>
+            </details>
+            <div class="generate-dock">
+              <button type="submit" id="generate" class="primary">
+                ✧ &nbsp; Придумать историю
+              </button>
+              <p id="generation-note" class="hint">
+                Канон и характеры героев учитываются в запросе.
+              </p>
+              <button type="button" id="cancel" class="text-button hidden">
+                Остановить
+              </button>
+            </div>
+          </form>
+          <div class="result-column">
+            <div id="job-progress" class="progress-panel hidden" role="status">
+              <span class="spinner"></span>
+              <div>
+                <strong id="job-stage">Собираем историю…</strong>
+                <p id="job-detail"></p>
+              </div>
+            </div>
+            <article id="editor" class="panel editor"></article>
+          </div>
+        </div>
+      </section>
+      <section id="page-library" class="page hidden">
+        <div class="section-head">
+          <h2>Истории остаются здесь</h2>
+          <input
+            id="library-search"
+            type="search"
+            placeholder="Найти по названию или тексту"
+            aria-label="Поиск историй"
+          />
+        </div>
+        <div id="library-grid" class="library-grid"></div>
+      </section>
+      <section id="page-world" class="page hidden">
+        <div class="world-toolbar">
+          <label>Текущая вселенная<select id="world-select"></select></label>
+          <div class="actions">
+            <button id="new-world">+ Новый мир</button
+            ><button id="import-world">Импорт JSON</button
+            ><a href="/api/world/export" download>Экспорт мира</a
+            ><input
+              type="file"
+              id="world-file"
+              accept="application/json,.json"
+              class="hidden"
+            />
+          </div>
+        </div>
+        <div id="world-editor"></div>
+      </section>
+      <section id="page-account" class="page hidden">
+        <div id="account-editor"></div>
+      </section>
+      <section id="page-settings" class="page hidden">
+        <div id="settings-editor"></div>
+      </section>
+      <div id="toast" role="status" class="toast hidden"></div>
+    </main>
+    <dialog id="confirm-dialog">
+      <h2>Удалить эту историю?</h2>
+      <p>Вместе с ней удалится сохранённая озвучка.</p>
+      <div class="actions">
+        <button id="keep-story">Оставить</button
+        ><button id="delete-story" class="danger">Удалить</button>
+      </div>
+    </dialog>
+  </body>
+</html>

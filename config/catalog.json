@@ -1,0 +1,76 @@
+{
+  "text": [
+    {
+      "id": "qwen3-4b",
+      "name": "Qwen3 4B Instruct",
+      "kind": "mlx",
+      "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "revision": "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
+      "size": "2.1 ГБ",
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit"
+    }
+  ],
+  "voice": [
+    {
+      "id": "aidar",
+      "name": "Айдар",
+      "kind": "silero",
+      "speaker": "aidar",
+      "note": "Спокойный рассказчик"
+    },
+    {
+      "id": "eugene",
+      "name": "Евгений",
+      "kind": "silero",
+      "speaker": "eugene",
+      "note": "Низкий, разговорный"
+    },
+    {
+      "id": "kseniya",
+      "name": "Ксения",
+      "kind": "silero",
+      "speaker": "kseniya",
+      "note": "Женский голос"
+    },
+    {
+      "id": "spongebob",
+      "name": "Губка Боб",
+      "kind": "rvc",
+      "speaker": "eugene",
+      "pitch": 8,
+      "note": "Silero → RVC",
+      "repo": "iamalexcaspian/SpongeBob-SquarePants-Russian",
+      "revision": "708c173c5d382ccea9974f710dd6574526a013da",
+      "filename": "SpongeBob-SquarePants-Russian.zip",
+      "source": "https://huggingface.co/iamalexcaspian/SpongeBob-SquarePants-Russian",
+      "license": "Условия на странице автора модели"
+    },
+    {
+      "id": "cartman",
+      "name": "Картман",
+      "kind": "rvc",
+      "speaker": "eugene",
+      "pitch": 4,
+      "note": "Silero → RVC",
+      "repo": "niobures/RVC-Models",
+      "revision": "04a4f1510f013fd8a5f5b9939cb07384017be690",
+      "filename": "rvc-big-ru-voice-pack/Персонажи/eric_cartmen/EricCartmanV1_e650_s10400.pth",
+      "source": "https://huggingface.co/niobures/RVC-Models",
+      "license": "Условия на странице автора модели"
+    },
+    {
+      "id": "zhirinovsky",
+      "name": "Жириновский",
+      "kind": "rvc",
+      "speaker": "eugene",
+      "pitch": 0,
+      "note": "Silero → RVC",
+      "repo": "niobures/RVC-Models",
+      "revision": "04a4f1510f013fd8a5f5b9939cb07384017be690",
+      "filename": "rvc-big-ru-voice-pack/Политики/Жириновский/Jirinovsky_e200_s2200.pth",
+      "source": "https://huggingface.co/niobures/RVC-Models",
+      "license": "Условия на странице автора модели"
+    }
+  ]
+}

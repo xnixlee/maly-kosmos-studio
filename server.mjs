@@ -1,4 +1,10 @@
 import {
+  ideaSchema,
+  ideaSettings,
+  ideaMessages,
+  parseIdea,
+} from "./lib/ideas.mjs";
+import {
   imageModels,
   imageDefaults,
   imageSettings,
@@ -443,6 +449,52 @@ async function saveImage(job, request) {
   await saveJobs();
   return asset;
 }
+async function generateIdea(job, w, s, connection) {
+  engines.voice.stop();
+  units(job, 0, 1, "идей");
+  const recent = jobs
+    .filter((j) => j.type === "idea" && j.worldId === w.id && j.idea)
+    .slice(0, 8)
+    .map((j) => j.idea);
+  const stories = (await allStories())
+    .filter((r) => r.worldId === w.id || r.worldSnapshot?.id === w.id)
+    .slice(0, 5)
+    .map((r) => r.logline);
+  const chat = ideaMessages(w, s, [...recent, ...stories]);
+  const progress = (t) =>
+    stage(job, t.replace("Пишем историю", "Придумываем идею"));
+  let raw;
+  if (connection.provider === "openai")
+    raw = (
+      await openai.generate(
+        {
+          messages: chat,
+          schema: ideaSchema,
+          schemaName: "cosmos_idea",
+          stageLabel: "OpenAI придумывает идею…",
+          model: connection.modelId,
+          reasoning: connection.reasoning,
+          accountId: job.accountId,
+          jobId: job.id,
+        },
+        progress,
+      )
+    ).text;
+  else
+    raw = await engines.text.call(
+      {
+        messages: chat,
+        model_path: manager.get(connection.modelId).path,
+        seed: Math.floor(Math.random() * 2147483647),
+        temperature: s.temperature,
+        max_tokens: 900,
+      },
+      progress,
+    );
+  checkCancelled(job);
+  job.idea = parseIdea(raw);
+  units(job, 1, 1, "идей");
+}
 async function generateFrames(job, r, indices, config) {
   const w = r.worldSnapshot || world;
   const cast = w.characters.filter((c) => r.settings.heroes.includes(c.id));
@@ -654,6 +706,26 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "PUT" && p === "/api/world") {
       world = await worlds.save(await body(req));
       return json(res, 200, world);
+    }
+    if (req.method === "POST" && p === "/api/ideas/generate") {
+      const b = await body(req);
+      if (b.worldId !== world.id)
+        throw bad("Мир изменился в другой вкладке. Открой его заново.", 409);
+      const w = structuredClone(world),
+        s = ideaSettings(b.settings, w),
+        connection = structuredClone(manager.config.text);
+      await readyText();
+      const accountId = (await openai.view()).active;
+      const job = newJob("idea", s);
+      Object.assign(job, {
+        worldId: w.id,
+        worldName: w.name,
+        connection,
+        accountId,
+      });
+      json(res, 202, publicJob(job));
+      void runJob(job, () => generateIdea(job, w, s, connection));
+      return;
     }
     if (req.method === "POST" && p === "/api/generate") {
       const b = await body(req);

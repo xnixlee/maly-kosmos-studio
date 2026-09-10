@@ -455,17 +455,37 @@ $("#generator").onsubmit = safe(async (e) => {
   e.preventDefault();
   startJob(await api("/api/generate", "POST", { settings: settings() }));
 });
-$("#random-idea").onclick = () => {
-  const ideas = state.world.ideas || [];
-  const hero =
-    state.world.characters.find((c) => selected.includes(c.id)) ||
-    state.world.characters[0];
-  $("#prompt").value = ideas.length
-    ? ideas[Math.floor(Math.random() * ideas.length)]
-    : `${hero.name} пытается выполнить обычное дело, но сталкивается с одним из законов мира.`;
-  $("#seed").value = "";
-  stashPrefs();
-};
+function ideaContext(s) {
+  return (
+    JSON.stringify([...(s.heroes || [])].sort()) +
+    JSON.stringify(
+      [
+        "place",
+        "format",
+        "duration",
+        "absurd",
+        "warmth",
+        "dread",
+        "ending",
+        "constraints",
+      ].map((k) => String(s[k] ?? "")),
+    )
+  );
+}
+$("#random-idea").onclick = safe(async () => {
+  const button = $("#random-idea");
+  button.disabled = true;
+  try {
+    startJob(
+      await api("/api/ideas/generate", "POST", {
+        worldId: state.world.id,
+        settings: settings(),
+      }),
+    );
+  } finally {
+    button.disabled = !!job;
+  }
+});
 
 function renderLibrary() {
   const q = $("#library-search").value.toLowerCase();
@@ -630,6 +650,9 @@ const creativeUI = setupCreative({
 
 function busy(value) {
   $("#generate").disabled = value;
+  $("#random-idea").disabled = value;
+  $("#random-idea").textContent =
+    value && job?.type === "idea" ? "Придумываем…" : "Случайная идея";
   $("#generate").textContent = value ? "Готовим материал…" : "Создать историю";
   $("#cancel").classList.toggle("hidden", !value);
   $$(
@@ -658,7 +681,7 @@ async function watchJob() {
     $("#job-progress").classList.add("hidden");
     state.stories = await api("/api/stories");
     renderLibrary();
-    if (["story", "character", "images"].includes(ended.type))
+    if (["story", "character", "images", "idea"].includes(ended.type))
       await accountUI.refresh();
     if (ended.character) await creativeUI.showCharacter(ended);
     if (ended.type === "images" && current?.id === ended.storyId && !dirty) {
@@ -672,6 +695,18 @@ async function watchJob() {
     else if (ended.type === "install") {
       await settingsUI.refresh();
       toast("Установка завершена.");
+    } else if (ended.type === "idea") {
+      if (
+        state.world.id === ended.worldId &&
+        $("#prompt").value === ended.settings.previousPrompt &&
+        ideaContext(settings()) === ideaContext(ended.settings)
+      ) {
+        $("#prompt").value = ended.idea;
+        $("#seed").value = "";
+        stashPrefs();
+        toast("Новая идея готова.");
+      } else
+        toast("Идея готова в разделе «Задачи». Твои текущие правки сохранены.");
     } else if (ended.type === "story") {
       const r = state.stories.find((r) => r.id === ended.results[0]);
       if (r) chooseStory(r);
@@ -712,15 +747,17 @@ function startJob(j) {
   busy(true);
   showJob(j);
   toast(
-    j.type === "story"
-      ? "Пишем историю: " + settingsUI.modelName()
-      : j.type === "install"
-        ? "Устанавливаем движок или модель."
-        : j.type === "character"
-          ? "Придумываем нового жителя по лору."
-          : j.type === "images"
-            ? "Рисуем кадры. Прогресс — в разделе задач."
-            : "Готовим голос. Первый запуск может занять несколько минут.",
+    j.type === "idea"
+      ? "Придумываем идею: " + settingsUI.modelName()
+      : j.type === "story"
+        ? "Пишем историю: " + settingsUI.modelName()
+        : j.type === "install"
+          ? "Устанавливаем движок или модель."
+          : j.type === "character"
+            ? "Придумываем нового жителя по лору."
+            : j.type === "images"
+              ? "Рисуем кадры. Прогресс — в разделе задач."
+              : "Готовим голос. Первый запуск может занять несколько минут.",
   );
   watchJob();
 }

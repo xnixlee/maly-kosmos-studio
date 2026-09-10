@@ -19,7 +19,7 @@ globalThis.fetch=async(url,opts)=>{
  if(!url.startsWith('https://api.openai.com/v1/'))throw new Error('Unexpected external request');
  await new Promise((resolve,reject)=>{const t=setTimeout(resolve,180);opts.signal?.addEventListener('abort',()=>{clearTimeout(t);reject(new Error('aborted'));},{once:true});});
  if(url.endsWith('/responses')) {
-  const c=Object.fromEntries(Object.keys(characterFields).map(k=>[k,k==='voice'?'aidar':k==='name'?'Мастер орбит':'Конкретная деталь.']));
+  const c=JSON.parse(opts.body).text.format.name==='cosmos_idea'?{idea:'Веня переносит калитку, а соседи теряют дорогу к его участку.'}:Object.fromEntries(Object.keys(characterFields).map(k=>[k,k==='voice'?'aidar':k==='name'?'Мастер орбит':'Конкретная деталь.']));
   return Response.json({status:'completed',id:'mock-response',usage:{input_tokens:100,output_tokens:300},output:[{content:[{type:'output_text',text:JSON.stringify(c)}]}]});
  }
  return Response.json({data:[{b64_json:${JSON.stringify(png)}}],usage:{input_tokens:100,output_tokens:1000,input_tokens_details:{text_tokens:100,image_tokens:0}}});
@@ -86,6 +86,28 @@ try {
   await api("/api/models/settings", "PUT", {
     text: { provider: "openai", modelId: "gpt-5.6-luna", reasoning: "low" },
   });
+  const ideaRequest = {
+    worldId: original,
+    settings: { ...initial.stories[0].settings, prompt: "", heroes: [] },
+  };
+  const idea = await ended(
+    await api("/api/ideas/generate", "POST", ideaRequest),
+  );
+  assert.equal(idea.status, "done", idea.error);
+  assert(idea.idea.includes("Веня"));
+  assert.equal(idea.connection.modelId, "gpt-5.6-luna");
+  assert.equal(idea.progress.completed, 1);
+  assert.equal(idea.worldId, original);
+  const ideaBill = (await api("/api/account")).recent.find(
+    (r) => r.jobId === idea.id,
+  );
+  assert(ideaBill.cost.usd > 0);
+  const oldWorld = await fetch(base + "/api/ideas/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...ideaRequest, worldId: "wrong-world" }),
+  });
+  assert.equal(oldWorld.status, 409);
   const character = await api("/api/characters/generate", "POST", {
     brief: "Придумай мастера орбит",
     portrait: true,
@@ -162,7 +184,7 @@ try {
   assert(account.recent.some((r) => r.status === "unknown"));
   assert(!JSON.stringify(account).includes("test-only-never-sent"));
   console.log(
-    "PASS: character + portrait, portrait retry, world switching, idempotent accept, scene edits during batch, PNG delivery, partial cancellation, task history and per-key image billing (mock API, no charges)",
+    "PASS: lore-based idea generation and billing, character + portrait, portrait retry, world switching, idempotent accept, scene edits during batch, PNG delivery, partial cancellation, task history and per-key image billing (mock API, no charges)",
   );
 } finally {
   child.kill();

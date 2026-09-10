@@ -42,6 +42,7 @@ export function setupCreative({
   };
   const types = {
     story: "Истории",
+    idea: "Идея для истории",
     audio: "Озвучка истории",
     preview: "Проба голоса",
     install: "Установка",
@@ -266,7 +267,7 @@ export function setupCreative({
       data.jobs
         .map(
           (j) =>
-            `<article class="panel task-card"><div class="section-head"><h3>${types[j.type] || esc(j.type)}</h3><span class="tag ${j.status === "error" ? "status-error" : ""}">${statuses[j.status] || esc(j.status)}</span></div>${j.status === "running" ? `<p>${esc(j.stage)}</p>` : ""}<p class="muted" data-task-clock="${j.id}">${esc(progress(j))} · ${new Date(j.createdAt).toLocaleString("ru-RU")}</p>${j.progress && j.status === "running" ? `<progress max="${j.progress.total}" value="${j.progress.completed}" aria-label="Готовые части задачи"></progress>` : j.status === "running" ? '<progress aria-label="Выполняется"></progress>' : ""}${j.error ? `<p class="status-error">${esc(j.error)}</p>` : ""}${j.notice ? `<p class="hint">${esc(j.notice)}</p>` : ""}<div class="actions">${j.status === "running" ? `<button data-cancel-task="${j.id}">Остановить</button>` : ""}${j.character && j.status !== "running" ? `<button data-review-character="${j.id}">${j.accepted ? "Посмотреть героя" : "Открыть карточку"}</button>` : ""}${j.storyId || (j.type === "story" && j.results?.length) ? `<button data-open-result="${esc(j.storyId || j.results[0])}">Открыть историю</button>` : ""}${j.audio ? `<audio controls src="${esc(j.audio.url)}"></audio><a href="${esc(j.audio.url)}" download>Скачать WAV</a>` : ""}</div>${j.images?.length ? `<details class="task-results"><summary>Изображения · ${j.images.length}</summary><div class="task-images">${j.images.map((a) => `<a href="${esc(a.url)}" download title="Скачать PNG"><img src="${esc(a.url)}" alt="Готовое изображение" loading="lazy"></a>`).join("")}</div></details>` : ""}</article>`,
+            `<article class="panel task-card"><div class="section-head"><h3>${types[j.type] || esc(j.type)}</h3><span class="tag ${j.status === "error" ? "status-error" : ""}">${statuses[j.status] || esc(j.status)}</span></div>${j.status === "running" ? `<p>${esc(j.stage)}</p>` : ""}<p class="muted" data-task-clock="${j.id}">${esc(progress(j))} · ${new Date(j.createdAt).toLocaleString("ru-RU")}</p>${j.progress && j.status === "running" ? `<progress max="${j.progress.total}" value="${j.progress.completed}" aria-label="Готовые части задачи"></progress>` : j.status === "running" ? '<progress aria-label="Выполняется"></progress>' : ""}${j.error ? `<p class="status-error">${esc(j.error)}</p>` : ""}${j.notice ? `<p class="hint">${esc(j.notice)}</p>` : ""}${j.idea ? `<p class="idea-result">${esc(j.idea)}</p>` : ""}<div class="actions">${j.idea ? `<button data-copy-idea="${j.id}">Копировать идею</button>` : ""}${j.status === "running" ? `<button data-cancel-task="${j.id}">Остановить</button>` : ""}${j.character && j.status !== "running" ? `<button data-review-character="${j.id}">${j.accepted ? "Посмотреть героя" : "Открыть карточку"}</button>` : ""}${j.storyId || (j.type === "story" && j.results?.length) ? `<button data-open-result="${esc(j.storyId || j.results[0])}">Открыть историю</button>` : ""}${j.audio ? `<audio controls src="${esc(j.audio.url)}"></audio><a href="${esc(j.audio.url)}" download>Скачать WAV</a>` : ""}</div>${j.images?.length ? `<details class="task-results"><summary>Изображения · ${j.images.length}</summary><div class="task-images">${j.images.map((a) => `<a href="${esc(a.url)}" download title="Скачать PNG"><img src="${esc(a.url)}" alt="Готовое изображение" loading="lazy"></a>`).join("")}</div></details>` : ""}</article>`,
         )
         .join("") ||
       '<p class="muted">Здесь появятся сценарии, кадры, персонажи, озвучка и установки.</p>';
@@ -275,6 +276,11 @@ export function setupCreative({
   $("#tasks-list").onclick = safe(async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
+    if (b.dataset.copyIdea) {
+      const j = await api("/api/jobs/" + b.dataset.copyIdea);
+      await navigator.clipboard.writeText(j.idea);
+      toast("Идея скопирована.");
+    }
     if (b.dataset.cancelTask) {
       await api("/api/jobs/" + b.dataset.cancelTask, "DELETE");
       await refreshTasks();

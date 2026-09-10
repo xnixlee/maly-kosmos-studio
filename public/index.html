@@ -12,50 +12,82 @@
     <script src="/app.js" type="module"></script>
   </head>
   <body>
+    <a href="#main-content" class="skip-link">К рабочей области</a>
     <aside class="rail">
       <a class="brand" href="/" aria-label="Малый космос"
         ><span class="orbit">мк</span><span>МАЛЫЙ<br />КОСМОС</span></a
-      ><span class="rail-label">МАСТЕРСКАЯ</span>
-      <nav>
-        <button class="nav" data-page="tasks">
-          ◷ &nbsp; Задачи <span id="tasks-count"></span>
+      >
+      <button class="primary rail-create" id="new-story">
+        + Новая история
+      </button>
+      <span class="rail-label">ПРОЕКТ</span>
+      <nav aria-label="Основная навигация">
+        <button class="nav active" data-page="studio">
+          <span class="nav-icon" aria-hidden="true">▤</span> Редактор
         </button>
-        <button class="nav active" data-page="studio">✧ &nbsp; Сценарии</button
-        ><button class="nav" data-page="library">
-          ▤ &nbsp; Библиотека <span id="library-count">1</span></button
-        ><button class="nav" data-page="world">◎ &nbsp; Мир и герои</button
-        ><button class="nav" data-page="settings">
-          ≋ &nbsp; Модели и голоса</button
-        ><button class="nav" data-page="account">
-          $ &nbsp; Кабинет OpenAI
+        <button class="nav" data-page="library">
+          <span class="nav-icon" aria-hidden="true">▦</span> Истории
+          <span id="library-count" class="nav-count">1</span>
+        </button>
+        <button class="nav" data-page="world">
+          <span class="nav-icon" aria-hidden="true">◎</span> Мир и персонажи
+        </button>
+        <button class="nav" data-page="tasks">
+          <span class="nav-icon" aria-hidden="true">◷</span> Задачи
+          <span id="tasks-count" class="nav-count"></span>
+        </button>
+        <span class="rail-label nav-group-label">НАСТРОЙКИ</span>
+        <button class="nav" data-page="settings">
+          <span class="nav-icon" aria-hidden="true">≋</span> Модели
+        </button>
+        <button class="nav" data-page="account">
+          <span class="nav-icon" aria-hidden="true">◇</span> Ключи и расходы
         </button>
       </nav>
       <div class="rail-bottom">
         <img src="/village.png" alt="Дачные планетки Малого космоса" />
-        <p>У каждого участка<br />свой низ.</p>
-        <span>Локальная студия · 01</span>
+        <strong id="rail-world-name">Малый космос</strong>
+        <button class="text-button" data-page="world">
+          Настроить вселенную
+        </button>
+        <span>Локальная мастерская</span>
       </div>
     </aside>
-    <main>
+    <main id="main-content">
       <header>
         <div>
-          <span class="eyebrow">СЦЕНАРНАЯ МАСТЕРСКАЯ</span>
-          <h1 id="page-title">Соберём странную историю.</h1>
+          <span class="eyebrow" id="workspace-world-name"
+            >МАЛЫЙ КОСМОС / МАСТЕРСКАЯ</span
+          >
+          <h1 id="page-title">Редактор истории</h1>
         </div>
         <button id="engine-badge" class="badge" data-page="settings">
           Проверяем движки…
         </button>
       </header>
       <section id="page-studio" class="page">
+        <div class="studio-toolbar">
+          <div>
+            <span class="muted">РАБОЧАЯ ОБЛАСТЬ</span
+            ><span id="workspace-caption">От идеи до готовой сцены</span>
+          </div>
+          <button
+            id="toggle-brief"
+            aria-expanded="true"
+            aria-controls="generator"
+          >
+            Скрыть параметры
+          </button>
+        </div>
         <div class="workspace">
           <form id="generator" class="brief panel">
             <div class="section-head">
-              <h2>Что происходит?</h2>
+              <h2>Новая история</h2>
               <button type="button" class="text-button" id="random-idea">
-                Подбросить идею ↗
+                Случайная идея
               </button>
             </div>
-            <label for="prompt">Завязка или просто странная мысль</label
+            <label for="prompt">Что должно случиться?</label
             ><textarea
               id="prompt"
               rows="3"
@@ -64,7 +96,7 @@
 Квазар решил проверить, кто выключает звёзды по ночам.</textarea
             >
             <div class="section-head">
-              <h3>Кто участвует</h3>
+              <h3>Персонажи</h3>
               <span id="selected-count" class="muted"></span>
             </div>
             <div id="hero-picker" class="hero-picker"></div>
@@ -94,31 +126,36 @@
                 </select></label
               >
             </div>
-            <h3>Настроение</h3>
-            <div class="sliders">
-              <label
-                >Абсурд <output id="absurd-value">70</output
-                ><input
-                  type="range"
-                  id="absurd"
-                  min="0"
-                  max="100"
-                  value="70" /></label
-              ><label
-                >Теплота <output id="warmth-value">50</output
-                ><input
-                  type="range"
-                  id="warmth"
-                  min="0"
-                  max="100"
-                  value="50" /></label
-              ><label
-                >Тревога <output id="dread-value">20</output
-                ><input type="range" id="dread" min="0" max="100" value="20"
-              /></label>
+            <label>Настроение</label>
+            <div class="mood-presets" aria-label="Настроение истории">
+              <button type="button" data-mood="warm">Тёплое</button
+              ><button type="button" data-mood="absurd">Абсурдное</button
+              ><button type="button" data-mood="uneasy">Тревожное</button>
             </div>
-            <details>
+            <details class="advanced-brief">
               <summary>Точная настройка</summary>
+              <div class="sliders">
+                <label
+                  >Абсурд <output id="absurd-value">70</output
+                  ><input
+                    type="range"
+                    id="absurd"
+                    min="0"
+                    max="100"
+                    value="70" /></label
+                ><label
+                  >Теплота <output id="warmth-value">50</output
+                  ><input
+                    type="range"
+                    id="warmth"
+                    min="0"
+                    max="100"
+                    value="50" /></label
+                ><label
+                  >Тревога <output id="dread-value">20</output
+                  ><input type="range" id="dread" min="0" max="100" value="20"
+                /></label>
+              </div>
               <label
                 >Развязка<select id="ending">
                   <option>Визуальный панчлайн</option>
@@ -154,7 +191,7 @@
             </details>
             <div class="generate-dock">
               <button type="submit" id="generate" class="primary">
-                ✧ &nbsp; Придумать историю
+                Создать историю
               </button>
               <p id="generation-note" class="hint">
                 Канон и характеры героев учитываются в запросе.
@@ -178,7 +215,7 @@
       </section>
       <section id="page-library" class="page hidden">
         <div class="section-head">
-          <h2>Истории остаются здесь</h2>
+          <h2>Все истории</h2>
           <input
             id="library-search"
             type="search"
@@ -188,7 +225,7 @@
         </div>
         <div id="library-grid" class="library-grid"></div>
       </section>
-      <section id="page-world" class="page hidden">
+      <section id="page-world" class="page hidden" data-section="characters">
         <div class="world-toolbar">
           <label>Текущая вселенная<select id="world-select"></select></label>
           <div class="actions">
@@ -203,20 +240,46 @@
             />
           </div>
         </div>
+        <div class="section-tabs" role="group" aria-label="Разделы мира">
+          <button
+            data-world-section="characters"
+            class="active"
+            aria-pressed="true"
+          >
+            Персонажи</button
+          ><button data-world-section="lore" aria-pressed="false">
+            Лор и правила</button
+          ><button data-world-section="create" aria-pressed="false">
+            Создать персонажа
+          </button>
+        </div>
         <div id="character-generator"></div>
         <div id="world-editor"></div>
       </section>
       <section id="page-account" class="page hidden">
         <div id="account-editor"></div>
       </section>
-      <section id="page-settings" class="page hidden">
+      <section id="page-settings" class="page hidden" data-section="text">
+        <div class="section-tabs" role="group" aria-label="Настройки моделей">
+          <button
+            data-settings-section="text"
+            class="active"
+            aria-pressed="true"
+          >
+            Текст</button
+          ><button data-settings-section="images" aria-pressed="false">
+            Изображения</button
+          ><button data-settings-section="local" aria-pressed="false">
+            Локальные модели и голоса
+          </button>
+        </div>
         <div id="image-settings-editor"></div>
         <div id="settings-editor"></div>
       </section>
       <section id="page-tasks" class="page hidden">
         <p class="muted">
-          Последние 40 задач. Студия выполняет одну тяжёлую задачу за раз.
-          Остановка не отменяет уже понесённые расходы OpenAI.
+          Все генерации и готовые результаты. Одновременно выполняется одна
+          задача.
         </p>
         <div id="tasks-list" class="task-list"></div>
       </section>

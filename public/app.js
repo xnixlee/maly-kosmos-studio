@@ -140,20 +140,66 @@ $("#hero-picker").onclick = (e) => {
   stashPrefs();
 };
 $("#generator").oninput = () => {
+  $$("[data-mood]").forEach((b) => b.setAttribute("aria-pressed", "false"));
   for (const k of ["absurd", "warmth", "dread"])
     $("#" + k + "-value").textContent = $("#" + k).value;
   stashPrefs();
 };
 const titles = {
-  studio: "Соберём странную историю.",
-  library: "Запас странных происшествий.",
-  world: "Здесь всё имеет последствия.",
-  settings: "Твои модели и движки.",
-  account: "OpenAI: ключи и расходы.",
-  tasks: "Всё, что сейчас создаётся.",
+  studio: "Редактор истории",
+  library: "Истории",
+  world: "Мир и персонажи",
+  settings: "Модели",
+  account: "Ключи и расходы",
+  tasks: "Задачи",
+};
+function setBrief(open) {
+  $("#page-studio").classList.toggle("brief-open", open);
+  $("#generator").hidden = !open;
+  $("#toggle-brief").textContent = open
+    ? "Скрыть параметры"
+    : "Параметры новой истории";
+  $("#toggle-brief").setAttribute("aria-expanded", String(open));
+}
+function worldSection(next) {
+  $("#page-world").dataset.section = next;
+  $$("[data-world-section]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.worldSection === next);
+    b.setAttribute("aria-pressed", String(b.dataset.worldSection === next));
+  });
+}
+function settingsSection(next) {
+  $("#page-settings").dataset.section = next;
+  $$("[data-settings-section]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.settingsSection === next);
+    b.setAttribute("aria-pressed", String(b.dataset.settingsSection === next));
+  });
+}
+$("#toggle-brief").onclick = () => setBrief($("#generator").hidden);
+$("#new-story").onclick = () => {
+  chooseStory(null);
+  $("#prompt").focus();
+};
+$(".mood-presets").onclick = (e) => {
+  const b = e.target.closest("[data-mood]");
+  if (!b) return;
+  const values = {
+    warm: [35, 85, 10],
+    absurd: [85, 45, 20],
+    uneasy: [50, 25, 80],
+  }[b.dataset.mood];
+  ["absurd", "warmth", "dread"].forEach((k, i) => {
+    $("#" + k).value = values[i];
+    $("#" + k + "-value").textContent = values[i];
+  });
+  $$("[data-mood]").forEach((el) =>
+    el.setAttribute("aria-pressed", String(el === b)),
+  );
+  stashPrefs();
 };
 function navigate(next) {
   page = next;
+  window.scrollTo({ top: 0, behavior: "auto" });
   $$(".page").forEach((el) =>
     el.classList.toggle("hidden", el.id !== "page-" + next),
   );
@@ -170,6 +216,10 @@ function navigate(next) {
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-page]");
   if (b) navigate(b.dataset.page);
+  const w = e.target.closest("[data-world-section]");
+  if (w) worldSection(w.dataset.worldSection);
+  const m = e.target.closest("[data-settings-section]");
+  if (m) settingsSection(m.dataset.settingsSection);
 });
 function persistDraft() {
   if (!current) return;
@@ -185,6 +235,7 @@ function markDirty() {
   persistDraft();
   const b = $("#save-story");
   if (b) b.textContent = "Сохранить правки";
+  $("#save-state")?.classList.add("unsaved");
   $("#save-state")?.replaceChildren(document.createTextNode("Есть правки"));
 }
 function voiceConfig() {
@@ -212,6 +263,7 @@ function chooseStory(r) {
   tab = "script";
   renderEditor();
   navigate("studio");
+  setBrief(!r);
 }
 const wordCount = () =>
   current.story.scenes.reduce(
@@ -228,14 +280,15 @@ function speakers() {
 }
 function renderEditor() {
   if (!current) {
+    $("#workspace-caption").textContent = "Новая история";
     $("#editor").innerHTML =
-      '<div class="empty"><h2>Здесь появится новая история</h2><p>Выбери героев и придумай первую неприятность.</p></div>';
+      '<div class="empty"><span class="empty-symbol" aria-hidden="true">✧</span><h2>Начните с идеи</h2><p>Выберите персонажей и опишите, что с ними случится.<br>Готовую историю можно будет отредактировать, проиллюстрировать и озвучить.</p><div class="empty-steps"><span>1. Сценарий</span><span>2. Кадры</span><span>3. Озвучка</span></div></div>';
     return;
   }
   const st = current.story,
     v = voiceConfig();
   $("#editor").innerHTML =
-    `<div class="editor-top"><span class="tag">${esc(current.engine)}</span><span id="save-state" class="muted">${dirty ? "Есть правки" : "Сохранено на Mac"}</span></div><input class="title-input" aria-label="Название истории" data-story="title" maxlength="160" value="${esc(st.title)}"><textarea class="logline" aria-label="О чём история" rows="2" maxlength="1000" data-story="logline">${esc(st.logline)}</textarea><div class="editor-meta"><span>${st.scenes.length} сцен</span><span id="word-count">${wordCount()} слов · ≈ ${Math.round(wordCount() / 1.9)} сек речи</span><span>${esc(current.settings.place)}</span></div><div class="tabs"><button class="tab ${tab === "script" ? "active" : ""}" data-tab="script">Сценарий</button><button class="tab ${tab === "shots" ? "active" : ""}" data-tab="shots">Кадры и звук</button><button class="tab ${tab === "voice" ? "active" : ""}" data-tab="voice">Озвучка</button></div>
+    `<div class="editor-top"><span class="tag">${esc(current.worldSnapshot?.name || state.world.name)}</span><span id="save-state" class="muted">${dirty ? "Есть правки" : "Сохранено"}</span></div><input class="title-input" aria-label="Название истории" data-story="title" maxlength="160" value="${esc(st.title)}"><textarea class="logline" aria-label="О чём история" rows="2" maxlength="1000" data-story="logline">${esc(st.logline)}</textarea><div class="editor-meta"><span>${st.scenes.length} сцен</span><span id="word-count">${wordCount()} слов · ≈ ${Math.round(wordCount() / 1.9)} сек речи</span><span>${esc(current.settings.place)}</span></div><div class="tabs"><button class="tab ${tab === "script" ? "active" : ""}" data-tab="script"><span class="step-index">1</span> Сценарий</button><button class="tab ${tab === "shots" ? "active" : ""}" data-tab="shots"><span class="step-index">2</span> Кадры</button><button class="tab ${tab === "voice" ? "active" : ""}" data-tab="voice"><span class="step-index">3</span> Озвучка</button></div>
  ${
    tab === "script"
      ? st.scenes
@@ -248,13 +301,13 @@ function renderEditor() {
                )
                .join(
                  "",
-               )}</select><button class="text-button" data-preview-scene="${i}" title="Прослушать сцену">▷ Слушать</button><button class="text-button danger remove-scene" data-remove-scene="${i}" aria-label="Удалить сцену ${i + 1}">×</button></div><textarea class="narration" aria-label="Реплика сцены ${i + 1}" data-scene="${i}" data-key="text" maxlength="1500" rows="${Math.max(2, Math.ceil(s.text.length / 56))}">${esc(s.text)}</textarea><label class="visual-label" for="visual-${i}">В кадре</label><textarea id="visual-${i}" class="scene-visual" data-scene="${i}" data-key="visual" maxlength="2500" rows="2">${esc(s.visual)}</textarea></section>`,
+               )}</select><button class="text-button" data-preview-scene="${i}" title="Прослушать сцену">▷ Слушать</button><button class="text-button danger remove-scene" data-remove-scene="${i}" aria-label="Удалить сцену ${i + 1}">×</button></div><textarea class="narration" aria-label="Реплика сцены ${i + 1}" data-scene="${i}" data-key="text" maxlength="1500" rows="${Math.max(2, Math.ceil(s.text.length / 56))}">${esc(s.text)}</textarea><details class="scene-direction"><summary>Описание кадра</summary><label class="visual-label" for="visual-${i}">Что видит зритель</label><textarea id="visual-${i}" class="scene-visual" data-scene="${i}" data-key="visual" maxlength="2500" rows="2">${esc(s.visual)}</textarea></details></section>`,
          )
          .join("") +
        '<button id="add-scene" class="text-button">+ Добавить сцену</button>'
      : ""
  }
- ${tab === "shots" ? `<div class="actions"><button id="generate-all-frames" class="primary">Нарисовать все кадры · ${st.scenes.length}</button><button data-page="settings" class="text-button">Модель и качество ↗</button></div><p class="hint">Отдельный платный запрос OpenAI на каждый кадр. Перед запуском правки сохранятся. Готовые варианты останутся в истории.</p>` + st.scenes.map((s, i) => `<section class="scene"><span class="scene-number">${String(i + 1).padStart(2, "0")}</span><label>Действие в кадре<textarea data-scene="${i}" data-key="visual" maxlength="2500" rows="3">${esc(s.visual)}</textarea></label><label>Звук и паузы<textarea data-scene="${i}" data-key="sound" maxlength="2500" rows="2">${esc(s.sound)}</textarea></label><label>Промпт для изображения<textarea class="prompt-text" data-scene="${i}" data-key="imagePrompt" maxlength="2500">${esc(s.imagePrompt)}</textarea></label><button class="text-button" data-copy-prompt="${i}">Копировать промпт</button>${creativeUI.shots(s, i, current)}</section>`).join("") : ""}
+ ${tab === "shots" ? `<div class="actions"><button id="generate-all-frames" class="primary">Создать ${st.scenes.length} кадров</button><button data-page="settings" data-settings-section="images" class="text-button">Модель и качество ↗</button></div><p class="hint">Каждый кадр — отдельный запрос OpenAI. Стоимость будет в разделе «Ключи и расходы».</p>` + st.scenes.map((s, i) => `<section class="scene"><span class="scene-number">${String(i + 1).padStart(2, "0")}</span>${creativeUI.shots(s, i, current)}<details class="shot-settings"><summary>Описание и настройки кадра</summary><label>Действие в кадре<textarea data-scene="${i}" data-key="visual" maxlength="2500" rows="3">${esc(s.visual)}</textarea></label><label>Звук и паузы<textarea data-scene="${i}" data-key="sound" maxlength="2500" rows="2">${esc(s.sound)}</textarea></label><label>Промпт для изображения<textarea class="prompt-text" data-scene="${i}" data-key="imagePrompt" maxlength="2500">${esc(s.imagePrompt)}</textarea></label><button class="text-button" data-copy-prompt="${i}">Копировать промпт</button></details></section>`).join("") : ""}
  ${
    tab === "voice"
      ? `<p class="muted">Каждая реплика получает голос своего героя. Рассказчик озвучивается отдельно.</p><label>Рассказчик<select data-voice="voice">${voiceOptions(v.voice)}</select></label><div class="two"><label>Темп речи<input type="number" data-voice="speed" min="0.7" max="1.4" step="0.05" value="${v.speed}"></label><label>Высота, полутона<input type="number" data-voice="pitch" min="-6" max="6" step="1" value="${v.pitch}"></label></div>${speakers()
@@ -269,7 +322,8 @@ function renderEditor() {
      : ""
  }
  ${tab !== "voice" ? `<details><summary>Связь с каноном</summary><textarea class="continuity" data-story="continuity" maxlength="2000" rows="3">${esc(st.continuity)}</textarea></details>` : ""}
- <div id="scene-preview"></div><div class="editor-footer"><div class="actions"><button id="save-story">${dirty ? "Сохранить правки" : "Сохранить"}</button><button data-export="md">Сценарий .md</button><button data-export="txt">Текст озвучки</button><button data-export="json">JSON</button><button id="repeat-settings" class="text-button">Настройки этой истории ↖</button></div><div class="rewrite-row"><input id="rewrite-instruction" maxlength="2000" placeholder="Что изменить? Например: меньше объяснений, больше действия" aria-label="Замечание к новой версии"><button id="rewrite" ${job ? "disabled" : ""}>Новая версия</button></div><p class="hint">Новая версия сохранится отдельно. Исходная история останется в библиотеке.</p></div>`;
+ <div id="scene-preview"></div><div class="editor-footer"><div class="actions"><button id="save-story">${dirty ? "Сохранить правки" : "Сохранить"}</button><details class="export-menu"><summary>Скачать</summary><div class="export-options"><button data-export="md">Сценарий Markdown</button><button data-export="txt">Текст для озвучки</button><button data-export="json">Проект JSON</button></div></details><button id="repeat-settings" class="text-button">Повторить параметры</button></div>${tab !== "voice" ? `<button class="primary next-step" data-tab="${tab === "script" ? "shots" : "voice"}">${tab === "script" ? "Далее: кадры" : "Далее: озвучка"} →</button>` : ""}<details class="rewrite-options"><summary>Создать новую версию по замечанию</summary><div class="rewrite-row"><input id="rewrite-instruction" maxlength="2000" placeholder="Что изменить? Например: меньше объяснений, больше действия" aria-label="Замечание к новой версии"><button id="rewrite" ${job ? "disabled" : ""}>Новая версия</button></div><p class="hint">Новая версия сохранится отдельно. Исходная история останется в библиотеке.</p></details></div>`;
+  $("#workspace-caption").textContent = current.story.title;
   $("#editor").oninput = (e) => {
     const el = e.target;
     if (el.dataset.story) {
@@ -303,7 +357,8 @@ async function saveStory(quiet = false) {
   dirty = false;
   localStorage.removeItem("cosmos-draft-" + v.id);
   state.stories = state.stories.map((r) => (r.id === v.id ? v : r));
-  if ($("#save-state")) $("#save-state").textContent = "Сохранено на Mac";
+  if ($("#save-state")) $("#save-state").textContent = "Сохранено";
+  $("#save-state")?.classList.remove("unsaved");
   if ($("#save-story")) $("#save-story").textContent = "Сохранить";
   if (!quiet) toast("История сохранена на Mac.");
   return v;
@@ -314,6 +369,7 @@ $("#editor").onclick = safe(async (e) => {
   if (b.dataset.tab) {
     tab = b.dataset.tab;
     renderEditor();
+    $("#editor").scrollIntoView({ behavior: "smooth", block: "start" });
   }
   if (b.id === "save-story") await saveStory();
   if (b.id === "generate-all-frames") await creativeUI.generateFrames("all");
@@ -353,6 +409,7 @@ $("#editor").onclick = safe(async (e) => {
     toast("Промпт скопирован.");
   }
   if (b.id === "repeat-settings") {
+    setBrief(true);
     applySettings(current.settings);
     toast("Настройки истории перенесены в генератор.");
   }
@@ -451,12 +508,24 @@ $("#delete-story").onclick = safe(async () => {
 });
 let worldDraft = structuredClone(state.world);
 function renderWorld() {
+  const openCards = $$("[data-character-card][open]").map(
+    (el) => el.dataset.characterCard,
+  );
   const w = worldDraft;
-  $("#world-editor").innerHTML =
-    `<div class="section-head"><h2>Библия мира</h2><button id="save-world" class="primary">Сохранить мир и героев</button></div><div class="world-grid"><div class="panel world-form"><label>Название мира<input data-world="name" maxlength="100" value="${esc(w.name)}"></label><label>О чём этот мир<textarea data-world="premise" rows="4" maxlength="5000">${esc(w.premise)}</textarea></label><label>Рассказчик<textarea data-world="narrator" rows="3" maxlength="3000">${esc(w.narrator || "")}</textarea></label><label>Интонация и правила письма<textarea data-world="style" rows="5" maxlength="5000">${esc(w.style)}</textarea></label></div><div class="panel world-form"><label>Неизменные законы<textarea data-world="laws" rows="8" maxlength="12000">${esc(w.laws)}</textarea></label><label>Места · каждое с новой строки<textarea data-world="places" rows="4">${esc(w.places.join("\n"))}</textarea></label><label>Банк завязок · каждая с новой строки<textarea data-world="ideas" rows="4">${esc((w.ideas || []).join("\n"))}</textarea></label></div></div><div class="section-head character-heading"><h2>Жители · ${w.characters.length}</h2><button id="add-character">+ Свой герой</button></div><div class="character-grid">${w.characters.map((c, i) => `<article class="panel character-editor"><div class="character-header">${avatar(c)}<div><h3>${esc(c.name)}</h3><span class="muted">${esc(c.role)}</span></div></div><label>Портрет<input type="file" accept="image/png,image/jpeg,image/webp" data-portrait="${i}"></label><label>Имя<input data-character="${i}" data-key="name" maxlength="80" value="${esc(c.name)}"></label><label>Роль<input data-character="${i}" data-key="role" maxlength="150" value="${esc(c.role)}"></label><label>Внешность, желания, характер, связи<textarea data-character="${i}" data-key="description" maxlength="3500" rows="7">${esc(c.description)}</textarea></label><label>Голос по умолчанию<select data-character="${i}" data-key="voice">${voiceOptions(c.voice)}</select></label><button class="text-button danger" data-remove-character="${i}">Убрать из новых историй</button></article>`).join("")}</div><p class="hint">Изменения влияют на новые истории. У созданных сценариев сохраняется собственная копия мира.</p>`;
+  $("#rail-world-name").textContent = w.name;
+  $("#workspace-world-name").textContent = w.name + " / МАСТЕРСКАЯ";
+  $("#world-editor").innerHTML = `
+    <div class="world-savebar"><p class="muted" id="world-save-state">Правки применяются к новым историям</p><button id="save-world" class="primary">Сохранить изменения</button></div>
+    <div class="world-lore"><div class="world-grid"><div class="panel world-form"><h2>Основа вселенной</h2><label>Название<input data-world="name" maxlength="100" value="${esc(w.name)}"></label><label>О чём этот мир<textarea data-world="premise" rows="5" maxlength="5000">${esc(w.premise)}</textarea></label><label>Законы мира<textarea data-world="laws" rows="8" maxlength="12000">${esc(w.laws)}</textarea></label><label>Места · по одному на строку<textarea data-world="places" rows="4">${esc(w.places.join("\n"))}</textarea></label></div><div class="panel world-form"><h2>Как рассказывать истории</h2><label>Рассказчик<textarea data-world="narrator" rows="3" maxlength="3000">${esc(w.narrator || "")}</textarea></label><label>Стиль и интонация<textarea data-world="style" rows="6" maxlength="5000">${esc(w.style)}</textarea></label><label>Идеи для историй · по одной на строку<textarea data-world="ideas" rows="5">${esc((w.ideas || []).join("\n"))}</textarea></label></div></div></div>
+    <div class="world-characters"><div class="section-head"><div><h2>Персонажи <span class="count-label">${w.characters.length}</span></h2><p class="muted">Открой карточку, чтобы изменить героя.</p></div><div class="actions"><button id="add-character">Добавить вручную</button><button class="primary" data-world-section="create">✧ Создать с AI</button></div></div><div class="character-grid">${w.characters.map((c, i) => `<details class="panel character-editor" data-character-card="${i}"><summary><div class="character-header">${avatar(c)}<div><h3>${esc(c.name)}</h3><span class="muted">${esc(c.role)}</span></div><span class="card-chevron" aria-hidden="true">⌄</span></div><p class="character-excerpt">${esc(c.description)}</p><span class="card-edit-label">Редактировать персонажа</span></summary><div class="character-fields"><label>Имя<input data-character="${i}" data-key="name" maxlength="80" value="${esc(c.name)}"></label><label>Роль в мире<input data-character="${i}" data-key="role" maxlength="150" value="${esc(c.role)}"></label><label>Внешность, характер и связи<textarea data-character="${i}" data-key="description" maxlength="3500" rows="8">${esc(c.description)}</textarea></label><label>Голос<select data-character="${i}" data-key="voice">${voiceOptions(c.voice)}</select></label><label>Заменить портрет<input type="file" accept="image/png,image/jpeg,image/webp" data-portrait="${i}"></label><button class="text-button danger" data-remove-character="${i}">Удалить персонажа из мира</button></div></details>`).join("")}</div></div>`;
+  openCards.forEach((id) => {
+    const card = $(`[data-character-card="${id}"]`);
+    if (card) card.open = true;
+  });
 }
 $("#world-editor").oninput = (e) => {
   const t = e.target;
+  $("#world-save-state").textContent = "Есть несохранённые изменения";
   if (t.dataset.world)
     worldDraft[t.dataset.world] = ["places", "ideas"].includes(t.dataset.world)
       ? t.value.split("\n").filter((x) => x.trim())
@@ -474,6 +543,9 @@ $("#world-editor").onclick = safe(async (e) => {
     );
     heroPicker();
     await refreshWorldList();
+    $("#world-save-state").textContent = "Изменения сохранены";
+    $("#rail-world-name").textContent = state.world.name;
+    $("#workspace-world-name").textContent = state.world.name + " / МАСТЕРСКАЯ";
     toast("Мир и характеры сохранены.");
   }
   if (b.id === "add-character") {
@@ -488,6 +560,12 @@ $("#world-editor").onclick = safe(async (e) => {
       portrait: null,
     });
     renderWorld();
+    worldSection("characters");
+    const card = $(
+      `[data-character-card="${worldDraft.characters.length - 1}"]`,
+    );
+    card.open = true;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   if (b.dataset.removeCharacter !== undefined) {
     if (worldDraft.characters.length === 1)
@@ -517,6 +595,7 @@ const creativeUI = setupCreative({
   navigate,
   state,
   getCurrent: () => current,
+  worldSection,
   saveStory,
   saveWorld: async () => {
     state.world = await api("/api/world", "PUT", worldDraft);
@@ -551,9 +630,7 @@ const creativeUI = setupCreative({
 
 function busy(value) {
   $("#generate").disabled = value;
-  $("#generate").textContent = value
-    ? "Готовим материал…"
-    : "✧  Придумать историю";
+  $("#generate").textContent = value ? "Готовим материал…" : "Создать историю";
   $("#cancel").classList.toggle("hidden", !value);
   $$(
     "#rewrite,#render-audio,#generate-character,#generate-all-frames,[data-generate-frame],[data-test-voice],[data-preview-scene]",
@@ -653,6 +730,11 @@ $("#cancel").onclick = safe(async () => {
 // Keep task progress visible on every page.
 $("header").after($("#job-progress"));
 $("#job-progress").append($("#cancel"));
+const taskLink = document.createElement("button");
+taskLink.className = "text-button";
+taskLink.dataset.page = "tasks";
+taskLink.textContent = "Все задачи";
+$("#job-progress").append(taskLink);
 renderWorld();
 settingsUI.render();
 accountUI.render();

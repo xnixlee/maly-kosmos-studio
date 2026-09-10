@@ -9,6 +9,7 @@ export function setupCreative({
   state,
   saveWorld,
   getCurrent,
+  worldSection,
   saveStory,
   refreshStory,
   onAccepted,
@@ -77,13 +78,13 @@ export function setupCreative({
   function imageSettings() {
     const { settings: s, models } = state.imageSettings;
     $("#image-settings-editor").innerHTML =
-      `<article class="panel image-settings"><span class="tag">ИЗОБРАЖЕНИЯ</span><h2>Кто рисует кадры и портреты</h2><div class="three"><label>Модель OpenAI<select id="image-model">${models.map((m) => `<option ${m === s.model ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></label><label>Качество<select id="image-quality">${Object.entries(
+      `<article class="panel image-settings"><span class="tag">ИЗОБРАЖЕНИЯ</span><h2>Модель для кадров и портретов</h2><div class="three"><label>Модель OpenAI<select id="image-model">${models.map((m) => `<option ${m === s.model ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></label><label>Качество<select id="image-quality">${Object.entries(
         {
-          low: "Черновик · low",
-          medium: "Среднее · medium",
-          high: "Высокое · high",
-          xhigh: "Очень высокое · xhigh",
-          max: "Максимальное · max",
+          low: "Черновое",
+          medium: "Сбалансированное",
+          high: "Высокое",
+          xhigh: "Очень высокое",
+          max: "Максимальное",
         },
       )
         .map(
@@ -119,7 +120,7 @@ export function setupCreative({
   }
   function generator() {
     $("#character-generator").innerHTML =
-      `<details class="panel character-builder" open><summary>✧ Придумать жителя этого мира</summary><p class="muted">Карточка с внешностью, характером, связями, голосом и завязками. Перед генерацией текущий лор и правки мира сохранятся.</p><label>Кто нужен этой вселенной?<textarea id="character-brief" maxlength="2500" rows="3" placeholder="Сосед, который ремонтирует чужую гравитацию, а дома всё время падает с потолка…"></textarea></label><label class="toggle-label"><input type="checkbox" id="character-with-portrait" checked> Нарисовать портрет через OpenAI · платный запрос</label><div class="actions"><button id="generate-character" class="primary">Создать персонажа</button><button data-page="settings" class="text-button">Выбрать модели ↗</button></div><p class="hint">Текст создаёт выбранная текстовая модель. Без портрета можно работать полностью локально. В мир герой попадёт после редактирования карточки.</p><div id="character-review"></div></details>`;
+      `<article class="panel character-builder"><h2>Новый персонаж</h2><p class="muted">Опиши идею. Модель учтёт текущий лор, придумает характер и связи с жителями.</p><label>Кто нужен этой вселенной?<textarea id="character-brief" maxlength="2500" rows="3" placeholder="Сосед, который ремонтирует чужую гравитацию, а дома всё время падает с потолка…"></textarea></label><label class="toggle-label"><input type="checkbox" id="character-with-portrait" checked> Добавить портрет · платный запрос OpenAI</label><div class="actions"><button id="generate-character" class="primary">Создать персонажа</button><button data-page="settings" class="text-button">Выбрать модели ↗</button></div><p class="hint">Перед запуском лор сохранится. Готовую карточку можно отредактировать, прежде чем добавить героя в мир.</p><div id="character-review"></div></article>`;
     $("#generate-character").onclick = safe(async () => {
       const brief = $("#character-brief").value.trim();
       if (!brief) throw new Error("Опиши, какого персонажа хочется.");
@@ -157,13 +158,35 @@ export function setupCreative({
       `<div class="character-review"><div class="section-head"><h3>${j.accepted ? "Герой добавлен" : "Новый житель · черновик"}</h3><span class="muted">${esc(j.worldName)}</span></div>${j.portrait ? `<a href="${esc(j.portrait.url)}" download><img class="generated-portrait" src="${esc(j.portrait.url)}" alt="Портрет персонажа"></a>` : '<p class="hint">Портрет не создан. Карточку можно добавить без него.</p>'}<div class="two">${Object.entries(
         fields,
       )
+        .filter(([k]) =>
+          ["name", "role", "appearance", "personality"].includes(k),
+        )
         .map(
           ([k, l]) =>
             `<label>${l}<textarea data-draft-field="${k}" maxlength="${limits[k]}" rows="${["name", "role"].includes(k) ? 1 : 3}">${esc(draft[k])}</textarea></label>`,
         )
         .join(
           "",
-        )}</div><label>Голос<select id="draft-voice">${[...new Set([draft.voice, ...state.voices.map((v) => v.id)])].map((v) => `<option value="${esc(v)}" ${v === draft.voice ? "selected" : ""}>${esc(state.voices.find((x) => x.id === v)?.name || v)}</option>`).join("")}</select></label><div class="actions"><button id="redraw-character">${j.portrait ? "Перерисовать портрет" : "Нарисовать портрет"} · OpenAI</button><button id="preview-character">▷ Послушать голос</button><button id="accept-character" class="primary" ${j.accepted ? "disabled" : ""}>Добавить в «${esc(j.worldName)}»</button>${j.portrait ? `<a href="${esc(j.portrait.url)}" download>Скачать портрет PNG</a>` : ""}</div><div id="character-preview-player"></div><p class="hint">Все детали попадут в редактируемое описание героя. Проверь связи и соответствие канону перед добавлением. Сохранённые истории сохраняют свой состав героев.</p></div>`;
+        )}</div><details class="character-depth"><summary>Желания, повадки и связи</summary><div class="two">${Object.entries(
+        fields,
+      )
+        .filter(
+          ([k]) =>
+            ![
+              "name",
+              "role",
+              "appearance",
+              "personality",
+              "imagePrompt",
+            ].includes(k),
+        )
+        .map(
+          ([k, l]) =>
+            `<label>${l}<textarea data-draft-field="${k}" maxlength="${limits[k]}" rows="3">${esc(draft[k])}</textarea></label>`,
+        )
+        .join(
+          "",
+        )}</div></details><details class="character-depth"><summary>Настроить промпт портрета</summary><label>Описание для изображения<textarea data-draft-field="imagePrompt" maxlength="1800" rows="4">${esc(draft.imagePrompt)}</textarea></label></details><label>Голос<select id="draft-voice">${[...new Set([draft.voice, ...state.voices.map((v) => v.id)])].map((v) => `<option value="${esc(v)}" ${v === draft.voice ? "selected" : ""}>${esc(state.voices.find((x) => x.id === v)?.name || v)}</option>`).join("")}</select></label><div class="actions"><button id="redraw-character">${j.portrait ? "Перерисовать портрет" : "Нарисовать портрет"} · OpenAI</button><button id="preview-character">▷ Послушать голос</button><button id="accept-character" class="primary" ${j.accepted ? "disabled" : ""}>Добавить в «${esc(j.worldName)}»</button>${j.portrait ? `<a href="${esc(j.portrait.url)}" download>Скачать портрет PNG</a>` : ""}</div><div id="character-preview-player"></div><p class="hint">Все детали попадут в редактируемое описание героя. Проверь связи и соответствие канону перед добавлением. Сохранённые истории сохраняют свой состав героев.</p></div>`;
     $("#character-review").oninput = (e) => {
       if (e.target.dataset.draftField)
         draft[e.target.dataset.draftField] = e.target.value;
@@ -217,6 +240,7 @@ export function setupCreative({
       if (saved && typeof saved === "object") draft = { ...draft, ...saved };
     } catch {}
     navigate("world");
+    worldSection("create");
     renderReview();
     $("#character-review").scrollIntoView({
       behavior: "smooth",
@@ -242,7 +266,7 @@ export function setupCreative({
       data.jobs
         .map(
           (j) =>
-            `<article class="panel task-card"><div class="section-head"><h3>${types[j.type] || esc(j.type)}</h3><span class="tag ${j.status === "error" ? "status-error" : ""}">${statuses[j.status] || esc(j.status)}</span></div><p>${esc(j.stage)}</p><p class="muted" data-task-clock="${j.id}">${esc(progress(j))} · ${new Date(j.createdAt).toLocaleString("ru-RU")}</p>${j.progress ? `<progress max="${j.progress.total}" value="${j.progress.completed}" aria-label="Готовые части задачи"></progress>` : j.status === "running" ? '<progress aria-label="Выполняется"></progress>' : ""}${j.error ? `<p class="status-error">${esc(j.error)}</p>` : ""}${j.notice ? `<p class="hint">${esc(j.notice)}</p>` : ""}<div class="actions">${j.status === "running" ? `<button data-cancel-task="${j.id}">Остановить</button>` : ""}${j.character && j.status !== "running" ? `<button data-review-character="${j.id}">${j.accepted ? "Посмотреть героя" : "Открыть карточку"}</button>` : ""}${j.storyId || (j.type === "story" && j.results?.length) ? `<button data-open-result="${esc(j.storyId || j.results[0])}">Открыть историю</button>` : ""}${j.audio ? `<audio controls src="${esc(j.audio.url)}"></audio><a href="${esc(j.audio.url)}" download>Скачать WAV</a>` : ""}</div>${j.images?.length ? `<div class="task-images">${j.images.map((a) => `<a href="${esc(a.url)}" download title="Скачать PNG"><img src="${esc(a.url)}" alt="Готовое изображение" loading="lazy"></a>`).join("")}</div>` : ""}</article>`,
+            `<article class="panel task-card"><div class="section-head"><h3>${types[j.type] || esc(j.type)}</h3><span class="tag ${j.status === "error" ? "status-error" : ""}">${statuses[j.status] || esc(j.status)}</span></div>${j.status === "running" ? `<p>${esc(j.stage)}</p>` : ""}<p class="muted" data-task-clock="${j.id}">${esc(progress(j))} · ${new Date(j.createdAt).toLocaleString("ru-RU")}</p>${j.progress && j.status === "running" ? `<progress max="${j.progress.total}" value="${j.progress.completed}" aria-label="Готовые части задачи"></progress>` : j.status === "running" ? '<progress aria-label="Выполняется"></progress>' : ""}${j.error ? `<p class="status-error">${esc(j.error)}</p>` : ""}${j.notice ? `<p class="hint">${esc(j.notice)}</p>` : ""}<div class="actions">${j.status === "running" ? `<button data-cancel-task="${j.id}">Остановить</button>` : ""}${j.character && j.status !== "running" ? `<button data-review-character="${j.id}">${j.accepted ? "Посмотреть героя" : "Открыть карточку"}</button>` : ""}${j.storyId || (j.type === "story" && j.results?.length) ? `<button data-open-result="${esc(j.storyId || j.results[0])}">Открыть историю</button>` : ""}${j.audio ? `<audio controls src="${esc(j.audio.url)}"></audio><a href="${esc(j.audio.url)}" download>Скачать WAV</a>` : ""}</div>${j.images?.length ? `<details class="task-results"><summary>Изображения · ${j.images.length}</summary><div class="task-images">${j.images.map((a) => `<a href="${esc(a.url)}" download title="Скачать PNG"><img src="${esc(a.url)}" alt="Готовое изображение" loading="lazy"></a>`).join("")}</div></details>` : ""}</article>`,
         )
         .join("") ||
       '<p class="muted">Здесь появятся сценарии, кадры, персонажи, озвучка и установки.</p>';
@@ -266,7 +290,7 @@ export function setupCreative({
     );
     const a = matches.at(-1) || assets.at(-1),
       stale = a && !matches.length;
-    return `<div class="scene-images">${a ? `<a href="${esc(a.url)}" download><img class="generated-frame" src="${esc(a.url)}" alt="Кадр ${i + 1}" loading="lazy"></a>${stale ? '<p class="hint">Этот кадр создан до правок сцены. Можно нарисовать новый.</p>' : ""}<div class="actions"><a href="${esc(a.url)}" download>Скачать PNG</a><span class="muted">${esc(a.model)} · ${a.cost ? "$" + a.cost.usd.toFixed(5) : "Стоимость не подтверждена"}</span></div>` : ""}<button data-generate-frame="${i}">${a ? "Новый вариант кадра" : "Нарисовать кадр"}</button>${assets.length > 1 ? `<details><summary>Предыдущие варианты · ${assets.length}</summary><div class="task-images">${assets.map((a) => `<a href="${esc(a.url)}" download><img src="${esc(a.url)}" alt="Вариант кадра" loading="lazy"></a>`).join("")}</div></details>` : ""}</div>`;
+    return `<div class="scene-images">${a ? `<a href="${esc(a.url)}" download><img class="generated-frame" src="${esc(a.url)}" alt="Кадр ${i + 1}" loading="lazy"></a>${stale ? '<p class="hint">Этот кадр создан до правок сцены. Можно нарисовать новый.</p>' : ""}<div class="actions"><a href="${esc(a.url)}" download>Скачать PNG</a><span class="muted">${esc(a.model)} · ${a.cost ? "$" + a.cost.usd.toFixed(5) : "Стоимость не подтверждена"}</span></div>` : `<div class="frame-placeholder"><span aria-hidden="true">▧</span><p>${esc(s.visual || "Изображение этой сцены ещё не создано")}</p></div>`}<button data-generate-frame="${i}">${a ? "Новый вариант кадра" : "Нарисовать кадр"}</button>${assets.length > 1 ? `<details><summary>Предыдущие варианты · ${assets.length}</summary><div class="task-images">${assets.map((a) => `<a href="${esc(a.url)}" download><img src="${esc(a.url)}" alt="Вариант кадра" loading="lazy"></a>`).join("")}</div></details>` : ""}</div>`;
   }
   async function generateFrames(indices) {
     await saveStory(true);

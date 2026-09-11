@@ -11,6 +11,39 @@ const esc = (s) =>
         c
       ],
   );
+const iconPaths = {
+  edit: '<path d="M12 20H4V4h10M16 3l5 5-9 9-5 1 1-5z"/>',
+  library:
+    '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  world:
+    '<circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="11" ry="4" transform="rotate(-30 12 12)"/>',
+  tasks: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  settings:
+    '<path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3"/><circle cx="16" cy="17" r="3"/>',
+  account:
+    '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/>',
+  spark:
+    '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
+  image:
+    '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',
+  voice:
+    '<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',
+  arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+};
+function icon(name) {
+  return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name] || iconPaths.spark}</svg>`;
+}
+for (const [pageName, name] of Object.entries({
+  studio: "edit",
+  library: "library",
+  world: "world",
+  tasks: "tasks",
+  settings: "settings",
+  account: "account",
+})) {
+  const target = $(`.nav[data-page="${pageName}"] .nav-icon`);
+  if (target) target.innerHTML = icon(name);
+}
 async function api(url, method = "GET", data) {
   const r = await fetch(url, {
     method,
@@ -93,6 +126,9 @@ function voiceOptions(id) {
   );
 }
 function heroPicker() {
+  selected = selected.filter((id) =>
+    state.world.characters.some((c) => c.id === id),
+  );
   const place = $("#place").value;
   $("#hero-picker").innerHTML = state.world.characters
     .map(
@@ -138,6 +174,7 @@ $("#hero-picker").onclick = (e) => {
     : [...selected, b.dataset.hero];
   heroPicker();
   stashPrefs();
+  if (!current) renderEditor();
 };
 $("#generator").oninput = () => {
   $$("[data-mood]").forEach((b) => b.setAttribute("aria-pressed", "false"));
@@ -278,23 +315,30 @@ function speakers() {
       .map((c) => c.name),
   ];
 }
+function worldPreview() {
+  const w = state.world;
+  const cast = w.characters.filter((c) => selected.includes(c.id));
+  const portraitCast = cast.length ? cast : w.characters.slice(0, 4);
+  return `<div class="world-preview"><div class="world-preview-art ${w.id === "maly-kosmos" ? "has-cover" : ""}">${w.id === "maly-kosmos" ? `<img class="world-cover" src="/village.png" alt="Вселенная Малого космоса">` : ""}<div class="world-cover-shade"></div><span class="preview-eyebrow">ВАША ВСЕЛЕННАЯ</span><div class="world-cover-title"><h2>${esc(w.name)}</h2><span>${w.characters.length} персонажей <span aria-hidden="true">/</span> ${w.places.length} локаций</span></div><button type="button" class="cover-action" data-page="world" aria-label="Открыть мир">${icon("arrow")}</button></div><div class="world-preview-body"><div class="section-head"><h3>${cast.length ? "В этой истории" : "Жители мира"}</h3><button class="text-button" data-page="world">Все персонажи ${icon("arrow")}</button></div><div class="preview-cast">${portraitCast.map((c) => `<div class="preview-person">${avatar(c)}<strong>${esc(c.name)}</strong><span>${esc(c.role)}</span></div>`).join("")}</div><p class="preview-premise">${esc(w.premise.slice(0, 240))}${w.premise.length > 240 ? "…" : ""}</p><div class="production-path"><span class="path-active">${icon("edit")} Сценарий</span><span>${icon("image")} Кадры</span><span>${icon("voice")} Озвучка</span></div></div></div>`;
+}
 function renderEditor() {
   if (!current) {
     $("#workspace-caption").textContent = "Новая история";
-    $("#editor").innerHTML =
-      '<div class="empty"><span class="empty-symbol" aria-hidden="true">✧</span><h2>Начните с идеи</h2><p>Выберите персонажей и опишите, что с ними случится.<br>Готовую историю можно будет отредактировать, проиллюстрировать и озвучить.</p><div class="empty-steps"><span>1. Сценарий</span><span>2. Кадры</span><span>3. Озвучка</span></div></div>';
+    $("#editor").classList.add("context-preview");
+    $("#editor").innerHTML = worldPreview();
     return;
   }
+  $("#editor").classList.remove("context-preview");
   const st = current.story,
     v = voiceConfig();
   $("#editor").innerHTML =
-    `<div class="editor-top"><span class="tag">${esc(current.worldSnapshot?.name || state.world.name)}</span><span id="save-state" class="muted">${dirty ? "Есть правки" : "Сохранено"}</span></div><input class="title-input" aria-label="Название истории" data-story="title" maxlength="160" value="${esc(st.title)}"><textarea class="logline" aria-label="О чём история" rows="2" maxlength="1000" data-story="logline">${esc(st.logline)}</textarea><div class="editor-meta"><span>${st.scenes.length} сцен</span><span id="word-count">${wordCount()} слов · ≈ ${Math.round(wordCount() / 1.9)} сек речи</span><span>${esc(current.settings.place)}</span></div><div class="tabs"><button class="tab ${tab === "script" ? "active" : ""}" data-tab="script"><span class="step-index">1</span> Сценарий</button><button class="tab ${tab === "shots" ? "active" : ""}" data-tab="shots"><span class="step-index">2</span> Кадры</button><button class="tab ${tab === "voice" ? "active" : ""}" data-tab="voice"><span class="step-index">3</span> Озвучка</button></div>
+    `<div class="editor-top"><span class="tag">${icon("edit")} ${esc(current.worldSnapshot?.name || state.world.name)}</span><span id="save-state" class="muted">${dirty ? "Есть правки" : "Сохранено"}</span></div><input class="title-input" aria-label="Название истории" data-story="title" maxlength="160" value="${esc(st.title)}"><textarea class="logline" aria-label="О чём история" rows="2" maxlength="1000" data-story="logline">${esc(st.logline)}</textarea><div class="editor-meta"><span>${st.scenes.length} сцен</span><span id="word-count">${wordCount()} слов · ≈ ${Math.round(wordCount() / 1.9)} сек речи</span><span>${esc(current.settings.place)}</span></div><div class="tabs"><button class="tab ${tab === "script" ? "active" : ""}" data-tab="script"><span class="step-index">${icon("edit")}</span><span>Сценарий</span><small>${st.scenes.length}</small></button><button class="tab ${tab === "shots" ? "active" : ""}" data-tab="shots"><span class="step-index">${icon("image")}</span><span>Кадры</span><small>${new Set((current.images || []).filter((a) => a.sceneIndex < st.scenes.length && JSON.stringify(a.scene) === JSON.stringify(st.scenes[a.sceneIndex])).map((a) => a.sceneIndex)).size}/${st.scenes.length}</small></button><button class="tab ${tab === "voice" ? "active" : ""}" data-tab="voice"><span class="step-index">${icon("voice")}</span><span>Озвучка</span><small>${current.audio ? "Готово" : "—"}</small></button></div>
  ${
    tab === "script"
      ? st.scenes
          .map(
            (s, i) =>
-             `<section class="scene"><span class="scene-number">${String(i + 1).padStart(2, "0")}</span><div class="scene-top"><select class="speaker" data-scene="${i}" data-key="speaker" aria-label="Кто говорит в сцене ${i + 1}">${speakers()
+             `<section class="scene"><span class="scene-number"><small>СЦЕНА</small>${String(i + 1).padStart(2, "0")}</span><div class="scene-top"><select class="speaker" data-scene="${i}" data-key="speaker" aria-label="Кто говорит в сцене ${i + 1}">${speakers()
                .map(
                  (name) =>
                    `<option ${s.speaker === name ? "selected" : ""}>${esc(name)}</option>`,
@@ -307,7 +351,7 @@ function renderEditor() {
        '<button id="add-scene" class="text-button">+ Добавить сцену</button>'
      : ""
  }
- ${tab === "shots" ? `<div class="actions"><button id="generate-all-frames" class="primary">Создать ${st.scenes.length} кадров</button><button data-page="settings" data-settings-section="images" class="text-button">Модель и качество ↗</button></div><p class="hint">Каждый кадр — отдельный запрос OpenAI. Стоимость будет в разделе «Ключи и расходы».</p>` + st.scenes.map((s, i) => `<section class="scene"><span class="scene-number">${String(i + 1).padStart(2, "0")}</span>${creativeUI.shots(s, i, current)}<details class="shot-settings"><summary>Описание и настройки кадра</summary><label>Действие в кадре<textarea data-scene="${i}" data-key="visual" maxlength="2500" rows="3">${esc(s.visual)}</textarea></label><label>Звук и паузы<textarea data-scene="${i}" data-key="sound" maxlength="2500" rows="2">${esc(s.sound)}</textarea></label><label>Промпт для изображения<textarea class="prompt-text" data-scene="${i}" data-key="imagePrompt" maxlength="2500">${esc(s.imagePrompt)}</textarea></label><button class="text-button" data-copy-prompt="${i}">Копировать промпт</button></details></section>`).join("") : ""}
+ ${tab === "shots" ? `<div class="actions"><button id="generate-all-frames" class="primary">Создать ${st.scenes.length} кадров</button><button data-page="settings" data-settings-section="images" class="text-button">Модель и качество ↗</button></div><p class="hint">Каждый кадр — отдельный запрос OpenAI. Стоимость будет в разделе «Ключи и расходы».</p>` + st.scenes.map((s, i) => `<section class="scene"><span class="scene-number"><small>СЦЕНА</small>${String(i + 1).padStart(2, "0")}</span>${creativeUI.shots(s, i, current)}<details class="shot-settings"><summary>Описание и настройки кадра</summary><label>Действие в кадре<textarea data-scene="${i}" data-key="visual" maxlength="2500" rows="3">${esc(s.visual)}</textarea></label><label>Звук и паузы<textarea data-scene="${i}" data-key="sound" maxlength="2500" rows="2">${esc(s.sound)}</textarea></label><label>Промпт для изображения<textarea class="prompt-text" data-scene="${i}" data-key="imagePrompt" maxlength="2500">${esc(s.imagePrompt)}</textarea></label><button class="text-button" data-copy-prompt="${i}">Копировать промпт</button></details></section>`).join("") : ""}
  ${
    tab === "voice"
      ? `<p class="muted">Каждая реплика получает голос своего героя. Рассказчик озвучивается отдельно.</p><label>Рассказчик<select data-voice="voice">${voiceOptions(v.voice)}</select></label><div class="two"><label>Темп речи<input type="number" data-voice="speed" min="0.7" max="1.4" step="0.05" value="${v.speed}"></label><label>Высота, полутона<input type="number" data-voice="pitch" min="-6" max="6" step="1" value="${v.pitch}"></label></div>${speakers()
@@ -497,7 +541,7 @@ function renderLibrary() {
     list
       .map(
         (r) =>
-          `<article class="panel story-card"><span class="tag">${esc(r.engine)}</span><h2>${esc(r.story.title)}</h2><p>${esc(r.story.logline)}</p><span class="muted">${new Date(r.createdAt).toLocaleDateString("ru-RU")} · ${r.story.scenes.length} сцен${r.audio ? " · с озвучкой" : ""}${r.parentId ? " · новая версия" : ""}</span><div class="actions"><button data-open="${r.id}">Открыть</button><button class="text-button danger" data-delete="${r.id}">Удалить</button></div></article>`,
+          `<article class="panel story-card"><div class="story-cover">${r.images?.length ? `<img src="${esc(r.images.at(-1).url)}" alt="Кадр истории" loading="lazy">` : `<span class="story-cover-icon">${icon("edit")}</span><span class="story-cover-title">${esc(r.story.title)}</span>`}<span class="story-cover-meta">${r.story.scenes.length} сцен ${r.audio ? "· Озвучено" : ""}</span></div><div class="story-card-body"><span class="tag">${esc(r.worldSnapshot?.name || state.world.name)}</span><h2>${esc(r.story.title)}</h2><p>${esc(r.story.logline)}</p><span class="muted">${new Date(r.createdAt).toLocaleDateString("ru-RU")} · ${r.story.scenes.length} сцен${r.audio ? " · с озвучкой" : ""}${r.parentId ? " · новая версия" : ""}</span><div class="actions"><button class="story-open" data-open="${r.id}">Продолжить ${icon("arrow")}</button><button class="text-button danger" data-delete="${r.id}">Удалить</button></div></div></article>`,
       )
       .join("") ||
     '<div class="empty">Здесь пока ничего нет. Новые истории сохраняются автоматически.</div>';
@@ -537,7 +581,7 @@ function renderWorld() {
   $("#world-editor").innerHTML = `
     <div class="world-savebar"><p class="muted" id="world-save-state">Правки применяются к новым историям</p><button id="save-world" class="primary">Сохранить изменения</button></div>
     <div class="world-lore"><div class="world-grid"><div class="panel world-form"><h2>Основа вселенной</h2><label>Название<input data-world="name" maxlength="100" value="${esc(w.name)}"></label><label>О чём этот мир<textarea data-world="premise" rows="5" maxlength="5000">${esc(w.premise)}</textarea></label><label>Законы мира<textarea data-world="laws" rows="8" maxlength="12000">${esc(w.laws)}</textarea></label><label>Места · по одному на строку<textarea data-world="places" rows="4">${esc(w.places.join("\n"))}</textarea></label></div><div class="panel world-form"><h2>Как рассказывать истории</h2><label>Рассказчик<textarea data-world="narrator" rows="3" maxlength="3000">${esc(w.narrator || "")}</textarea></label><label>Стиль и интонация<textarea data-world="style" rows="6" maxlength="5000">${esc(w.style)}</textarea></label><label>Идеи для историй · по одной на строку<textarea data-world="ideas" rows="5">${esc((w.ideas || []).join("\n"))}</textarea></label></div></div></div>
-    <div class="world-characters"><div class="section-head"><div><h2>Персонажи <span class="count-label">${w.characters.length}</span></h2><p class="muted">Открой карточку, чтобы изменить героя.</p></div><div class="actions"><button id="add-character">Добавить вручную</button><button class="primary" data-world-section="create">✧ Создать с AI</button></div></div><div class="character-grid">${w.characters.map((c, i) => `<details class="panel character-editor" data-character-card="${i}"><summary><div class="character-header">${avatar(c)}<div><h3>${esc(c.name)}</h3><span class="muted">${esc(c.role)}</span></div><span class="card-chevron" aria-hidden="true">⌄</span></div><p class="character-excerpt">${esc(c.description)}</p><span class="card-edit-label">Редактировать персонажа</span></summary><div class="character-fields"><label>Имя<input data-character="${i}" data-key="name" maxlength="80" value="${esc(c.name)}"></label><label>Роль в мире<input data-character="${i}" data-key="role" maxlength="150" value="${esc(c.role)}"></label><label>Внешность, характер и связи<textarea data-character="${i}" data-key="description" maxlength="3500" rows="8">${esc(c.description)}</textarea></label><label>Голос<select data-character="${i}" data-key="voice">${voiceOptions(c.voice)}</select></label><label>Заменить портрет<input type="file" accept="image/png,image/jpeg,image/webp" data-portrait="${i}"></label><button class="text-button danger" data-remove-character="${i}">Удалить персонажа из мира</button></div></details>`).join("")}</div></div>`;
+    <div class="world-characters"><div class="section-head"><div><h2>Персонажи <span class="count-label">${w.characters.length}</span></h2><p class="muted">Открой карточку, чтобы изменить героя.</p></div><div class="actions"><button id="add-character">Добавить вручную</button><button class="primary" data-world-section="create">✧ Создать с AI</button></div></div><div class="character-grid">${w.characters.map((c, i) => `<details class="panel character-editor" data-character-card="${i}"><summary><div class="character-portrait">${avatar(c)}<span class="portrait-number">${String(i + 1).padStart(2, "0")}</span></div><div class="character-header"><div><h3>${esc(c.name)}</h3><span class="muted">${esc(c.role)}</span></div><span class="card-chevron" aria-hidden="true">⌄</span></div><p class="character-excerpt">${esc(c.description)}</p><span class="card-edit-label">Редактировать персонажа</span></summary><div class="character-fields"><label>Имя<input data-character="${i}" data-key="name" maxlength="80" value="${esc(c.name)}"></label><label>Роль в мире<input data-character="${i}" data-key="role" maxlength="150" value="${esc(c.role)}"></label><label>Внешность, характер и связи<textarea data-character="${i}" data-key="description" maxlength="3500" rows="8">${esc(c.description)}</textarea></label><label>Голос<select data-character="${i}" data-key="voice">${voiceOptions(c.voice)}</select></label><label>Заменить портрет<input type="file" accept="image/png,image/jpeg,image/webp" data-portrait="${i}"></label><button class="text-button danger" data-remove-character="${i}">Удалить персонажа из мира</button></div></details>`).join("")}</div></div>`;
   openCards.forEach((id) => {
     const card = $(`[data-character-card="${id}"]`);
     if (card) card.open = true;
@@ -829,6 +873,7 @@ async function changeWorld(w) {
   renderWorld();
   await refreshWorldList();
   stashPrefs();
+  if (!current) renderEditor();
   toast("Вселенная открыта. Выбери героев для новой истории.");
 }
 $("#world-select").onchange = safe(async (e) => {

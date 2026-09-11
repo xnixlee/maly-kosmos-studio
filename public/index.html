@@ -15,7 +15,10 @@
     <a href="#main-content" class="skip-link">К рабочей области</a>
     <aside class="rail">
       <a class="brand" href="/" aria-label="Малый космос"
-        ><span class="orbit">мк</span><span>МАЛЫЙ<br />КОСМОС</span></a
+        ><span class="orbit">мк</span
+        ><span class="brand-name"
+          >малый космос<small>STORY STUDIO</small></span
+        ></a
       >
       <button class="primary rail-create" id="new-story">
         + Новая история
@@ -50,7 +53,7 @@
         <button class="text-button" data-page="world">
           Настроить вселенную
         </button>
-        <span>Локальная мастерская</span>
+        <span class="local-caption">Сохранено на вашем компьютере</span>
       </div>
     </aside>
     <main id="main-content">
@@ -81,13 +84,12 @@
         </div>
         <div class="workspace">
           <form id="generator" class="brief panel">
-            <div class="section-head">
-              <h2>Новая история</h2>
-              <button type="button" class="text-button" id="random-idea">
-                Случайная идея
-              </button>
+            <div class="brief-kicker">НОВЫЙ ЭПИЗОД</div>
+            <div class="section-head brief-heading">
+              <h2>О чём история?</h2>
             </div>
-            <label for="prompt">Что должно случиться?</label
+            <label for="prompt" class="numbered-label"
+              ><span>01</span> Завязка</label
             ><textarea
               id="prompt"
               rows="3"
@@ -95,11 +97,17 @@
             >
 Квазар решил проверить, кто выключает звёзды по ночам.</textarea
             >
+            <div class="prompt-tools">
+              <button type="button" class="text-button" id="random-idea">
+                Случайная идея
+              </button>
+            </div>
             <div class="section-head">
-              <h3>Персонажи</h3>
+              <h3 class="numbered-label"><span>02</span> Персонажи</h3>
               <span id="selected-count" class="muted"></span>
             </div>
             <div id="hero-picker" class="hero-picker"></div>
+            <div class="brief-format-label">Где и как</div>
             <div class="two">
               <label>Место<select id="place"></select></label
               ><label
@@ -126,7 +134,7 @@
                 </select></label
               >
             </div>
-            <label>Настроение</label>
+            <label class="numbered-label"><span>03</span> Настроение</label>
             <div class="mood-presets" aria-label="Настроение истории">
               <button type="button" data-mood="warm">Тёплое</button
               ><button type="button" data-mood="absurd">Абсурдное</button
